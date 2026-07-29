@@ -1,4 +1,6 @@
-// Single source of truth for where Dchat stores its files.
+// Single source of truth for where the app stores its files.
+// NOTE: the folder stays named 'Dchat' on purpose. It is internal, nobody sees
+// it, and renaming it would orphan every existing station list and setting.
 // Both main.js and server.js use this, so they can never point at different folders.
 const fs = require('fs');
 const path = require('path');

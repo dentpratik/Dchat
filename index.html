@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dchat</title>
+    <title>Chit-Chat</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -25,7 +24,7 @@
         .menu-dropdown div { padding: 8px 10px; cursor: pointer; font-size: 12px; color: #2c3e50; border-bottom: 1px solid #eee; }
         .menu-dropdown div:last-child { border-bottom: none; }
         .menu-dropdown div:hover { background: #ecf0f1; }
-        
+
         /* LOCKED GRID: Fixed 8 columns, auto rows */
         .grid-area { flex: 1; display: grid; grid-template-columns: repeat(8, 1fr); grid-auto-rows: 1fr; gap: 5px; padding: 8px; background-color: #ffffff; position: relative; overflow-y: auto; }
         .box { border: 1px solid #bdc3c7; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; color: #34495e; background-color: #ecf0f1; cursor: pointer; text-align: center; transition: background 0.2s, border 0.2s, opacity 0.2s; position: relative; overflow: hidden; }
@@ -63,7 +62,7 @@
         .ws-clear-btn:hover { background: #7f8c8d; }
         .msg-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 250px; background: white; border: 2px solid #8e44ad; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: none; flex-direction: column; padding: 10px; z-index: 25; }
         .msg-box-title { font-size: 14px; font-weight: bold; color: #2c3e50; margin-bottom: 10px; text-align: center; }
-        .msg-box textarea { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; resize: none; height: 50px; }
+        .msg-box textarea { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; resize: vertical; height: 80px; font-family: inherit; }
         .msg-box-actions { display: flex; gap: 10px; }
         .msg-box-actions button { flex: 1; padding: 8px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
         .btn-send { background: #27ae60; }
@@ -84,10 +83,17 @@
         .settings-header h2 { font-size: 16px; }
         .settings-back { background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
         .settings-body, .inbox-body { flex: 1; padding: 15px; overflow-y: auto; }
-        .inbox-item { background: white; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #2980b9; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .inbox-item.private { border-left-color: #8e44ad; }
-        .inbox-item .meta { font-size: 11px; color: #7f8c8d; margin-bottom: 5px; display: flex; justify-content: space-between; }
-        .inbox-item .content { font-size: 14px; color: #2c3e50; }
+        .thread { background: white; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #2980b9; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
+        .thread.private { border-left-color: #8e44ad; }
+        .thread-header { font-size: 11px; color: #7f8c8d; padding: 7px 10px 3px; display: flex; justify-content: space-between; gap: 8px; }
+        .thread-with { font-weight: bold; color: #2c3e50; }
+        .thread-msg { padding: 4px 10px 6px; font-size: 13px; }
+        .thread-msg.mine { background: #f4f6f7; }
+        .thread-msg .who { font-size: 10px; font-weight: bold; color: #7f8c8d; text-transform: uppercase; letter-spacing: 0.3px; }
+        .thread-msg .body { color: #2c3e50; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; }
+        .thread-actions { padding: 6px 10px 9px; }
+        .thread-reply-btn { padding: 4px 12px; background: #8e44ad; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; }
+        .thread-reply-btn:hover { opacity: 0.85; }
         .settings-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #ddd; gap: 10px; }
         .settings-row input[type="text"] { padding: 5px; flex: 1; border: 1px solid #ccc; border-radius: 4px; }
         .settings-row button { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
@@ -105,7 +111,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <span>Dchat</span>
+            <span>Chit-Chat</span>
             <input type="text" class="user-input" id="myNameInput" placeholder="Enter your name..." onchange="updateMyName()">
         </div>
         <div class="functions">
@@ -170,14 +176,14 @@
         <div class="inbox-overlay" id="inboxOverlay">
             <div class="settings-header">
                 <h2>Inbox</h2>
-                <button class="settings-back" onclick="closeInbox()">Back to Dchat</button>
+                <button class="settings-back" onclick="closeInbox()">Back to Chit-Chat</button>
             </div>
             <div class="inbox-body" id="inboxBody"></div>
         </div>
         <div class="settings-overlay" id="settingsOverlay">
             <div class="settings-header">
                 <h2 id="settingsTitle">Settings</h2>
-                <button class="settings-back" onclick="closeSettings()">Back to Dchat</button>
+                <button class="settings-back" onclick="closeSettings()">Back to Chit-Chat</button>
             </div>
             <div class="settings-body" id="settingsBody"></div>
         </div>
@@ -190,14 +196,15 @@
         let stations = [];
         let doctors = [];
         let categories = [];
-        
-        let activeStatus = {}; 
+        let alertRecipients = [];
+
+        let activeStatus = {};
         let currentWSStation = null;
         let isEditMode = false;
-        let selectedDoctorInWS = ""; 
+        let selectedDoctorInWS = "";
         let soundSettings = { muteAll: false, broadcastSound: true, privateMessageSound: true };
 
-        let currentMsgType = ""; 
+        let currentMsgType = "";
         let inboxMessages = [];
         let unreadCount = 0;
 
@@ -211,14 +218,88 @@
                 .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
-        function getMyName() { return document.getElementById('myNameInput').value.trim(); }
-        function updateMyName() { 
-            const name = getMyName();
-            if (name) { 
-                socket.emit('registerName', name); 
-                localStorage.setItem('dchat_my_name', name); 
+        // ---------------- SOUND ----------------
+        // Tones are generated in code rather than played from files, so there
+        // are no audio assets to package, license, or lose in a build.
+
+        let audioCtx = null;
+
+        function audio() {
+            if (!audioCtx) {
+                const Ctx = window.AudioContext || window.webkitAudioContext;
+                if (!Ctx) return null;
+                audioCtx = new Ctx();
             }
-            syncUsersToLocalStorage(); 
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
+        }
+
+        // Browsers block audio until the user has interacted with the page.
+        // Wake it up on the first click or keypress and then stop listening.
+        function unlockAudio() {
+            audio();
+            document.removeEventListener('click', unlockAudio);
+            document.removeEventListener('keydown', unlockAudio);
+        }
+        document.addEventListener('click', unlockAudio);
+        document.addEventListener('keydown', unlockAudio);
+
+        // One note. delay/dur in seconds, vol 0-1.
+        function tone(freq, delay, dur, type, vol) {
+            const ctx = audio();
+            if (!ctx) return;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = type || 'sine';
+            osc.frequency.value = freq;
+            const t0 = ctx.currentTime + delay;
+            // Ramp in and out; a square edge on a cheap speaker clicks badly.
+            gain.gain.setValueAtTime(0.0001, t0);
+            gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(t0);
+            osc.stop(t0 + dur + 0.02);
+        }
+
+        // Monitor speakers are quiet, so these run fairly hot.
+        const SOUNDS = {
+            'Chime':  () => { tone(880, 0, 0.28, 'sine', 0.5); tone(1318, 0.13, 0.34, 'sine', 0.45); },
+            'Bell':   () => { tone(1568, 0, 0.6, 'sine', 0.45); tone(3136, 0, 0.4, 'sine', 0.12); },
+            'Buzzer': () => { tone(196, 0, 0.16, 'square', 0.3); tone(196, 0.22, 0.16, 'square', 0.3); },
+            'Pop':    () => { tone(660, 0, 0.09, 'triangle', 0.5); },
+            'None':   () => {}
+        };
+
+        function playSound(name) {
+            if (soundSettings.muteAll) return;
+            const fn = SOUNDS[name];
+            if (fn) fn();
+        }
+
+        // Emergency deliberately ignores the mute switch and is the only
+        // repeating sound, so it can't be confused with anything routine.
+        function playEmergency() {
+            for (let i = 0; i < 4; i++) {
+                const t = i * 0.42;
+                tone(988, t, 0.19, 'square', 0.55);
+                tone(740, t + 0.2, 0.19, 'square', 0.55);
+            }
+        }
+
+        function playMessageSound(isPrivate) {
+            if (soundSettings.muteAll) return;
+            if (isPrivate) { tone(784, 0, 0.16, 'sine', 0.5); tone(1046, 0.14, 0.26, 'sine', 0.45); }
+            else { tone(587, 0, 0.22, 'sine', 0.4); }
+        }
+
+        function getMyName() { return document.getElementById('myNameInput').value.trim(); }
+        function updateMyName() {
+            const name = getMyName();
+            if (name) {
+                socket.emit('registerName', name);
+                localStorage.setItem('dchat_my_name', name);
+            }
         }
 
         socket.on('nameTaken', (name) => {
@@ -236,19 +317,19 @@
         function renderGrid() {
             const grid = document.getElementById('gridArea');
             grid.innerHTML = '';
-            if (stations.length === 0) return; 
-            
+            if (stations.length === 0) return;
+
             // Locked to 8 columns so the grid doesn't shift when adding/removing
-            const cols = 8; 
+            const cols = 8;
             grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
 
             stations.forEach(station => {
                 const box = document.createElement('div');
                 box.className = 'box';
                 box.id = 'box-' + station.id;
-                box.draggable = false; 
+                box.draggable = false;
                 box.dataset.stationId = station.id;
-                
+
                 let status = activeStatus[station.id];
                 if (status) {
                     box.style.backgroundColor = status.color;
@@ -265,13 +346,13 @@
                 }
 
                 box.onclick = () => {
-                    if (canDrag) return; 
+                    if (canDrag) return;
                     if (activeStatus[station.id]) clearStatusInstant(station.id);
                     else openWS(station.id);
                 };
 
                 box.onmousedown = (e) => {
-                    if (e.target.classList.contains('box-name') || e.target.tagName === 'INPUT') return; 
+                    if (e.target.classList.contains('box-name') || e.target.tagName === 'INPUT') return;
                     pressTimer = setTimeout(() => {
                         canDrag = true; box.draggable = true; box.classList.add('dragging');
                     }, 3000);
@@ -293,8 +374,8 @@
                         const temp = stations[draggedIndex];
                         stations[draggedIndex] = stations[targetIndex];
                         stations[targetIndex] = temp;
-                        renderGrid(); 
-                        
+                        renderGrid();
+
                         socket.emit('updateStationOrder', stations.map(s => s.id));
                     }
                 };
@@ -302,9 +383,9 @@
             });
         }
 
-        function clearStatusInstant(id) { 
-            delete activeStatus[id]; 
-            renderGrid(); 
+        function clearStatusInstant(id) {
+            delete activeStatus[id];
+            renderGrid();
             socket.emit('updateStatus', { stationId: id, status: null });
         }
 
@@ -316,7 +397,7 @@
             const input = document.createElement('input');
             input.type = 'text'; input.className = 'box-name-input'; input.value = station.name;
             nameSpan.replaceWith(input); input.focus(); input.select();
-            const saveName = () => { 
+            const saveName = () => {
                 const newName = input.value.trim() || station.name;
                 socket.emit('updateStationName', { id: id, name: newName });
             };
@@ -329,7 +410,7 @@
             currentWSStation = stationId;
             const station = stations.find(s => s.id === stationId);
             document.getElementById('wsTitle').innerText = "Status: " + station.name;
-            isEditMode = false; selectedDoctorInWS = ""; 
+            isEditMode = false; selectedDoctorInWS = "";
             const docRow = document.getElementById('wsDoctorRow');
             docRow.innerHTML = '';
             doctors.forEach(doc => {
@@ -382,7 +463,7 @@
         function updateCategory(id, field, value) {
             socket.emit('updateCategory', { id: id, [field]: value });
         }
-        
+
         function addCategory() {
             const input = document.getElementById('newCatInput');
             const newCatName = input.value.trim();
@@ -396,7 +477,7 @@
             if (currentWSStation) {
                 const stationId = currentWSStation;
                 activeStatus[stationId] = { category: cat.name, color: cat.color, sound: cat.sound, doctor: selectedDoctorInWS, startTime: Date.now() };
-                renderGrid(); 
+                renderGrid();
                 closeWS();
                 socket.emit('updateStatus', { stationId: stationId, status: activeStatus[stationId] });
             }
@@ -411,12 +492,12 @@
         }
         document.addEventListener('click', () => document.getElementById('menuDropdown').style.display = 'none');
 
-        // Settings Logic 
+        // Settings Logic
         function openSettings(tab) {
             document.getElementById('menuDropdown').style.display = 'none';
             const body = document.getElementById('settingsBody');
             const title = document.getElementById('settingsTitle');
-            body.innerHTML = ''; 
+            body.innerHTML = '';
 
             if (tab === 'stations') {
                 title.innerText = "Manage Stations";
@@ -431,7 +512,17 @@
                 body.innerHTML = `<div id="catListSettings"></div>`; renderCategorySettings();
             } else if (tab === 'sounds') {
                 title.innerText = "Sound & Alert Settings";
-                body.innerHTML = `<div class="settings-row"><span>Mute All Sounds</span><div class="toggle-switch ${soundSettings.muteAll ? 'on' : ''}" onclick="toggleSound('muteAll', this)"></div></div>`;
+                body.innerHTML = `<div class="settings-row"><span>Mute All Sounds</span><div class="toggle-switch ${soundSettings.muteAll ? 'on' : ''}" onclick="toggleSound('muteAll', this)"></div></div>
+                    <div style="margin-top: 18px; font-weight: bold; color: #2c3e50; font-size: 14px;">Emergency Med Expiry Alerts</div>
+                    <div style="font-size: 11px; color: #7f8c8d; margin: 4px 0 10px;">Sent when a med is within 30 days of expiry. Doctors marked as working always receive these. Add anyone else below. Names must match what they type in their name box.</div>
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;"><input type="text" id="newAlertName" placeholder="Name (e.g. Liz)" style="flex:1; padding:5px;"><button class="btn-add" onclick="addAlertRecipient()">Add</button></div>
+                    <div id="alertList"></div>
+                    <div style="margin-top: 18px; font-weight: bold; color: #2c3e50; font-size: 14px;">Test a Sound</div>
+                    <div style="display: flex; gap: 10px; margin-top: 6px;">
+                        <select id="testSoundPick" style="flex:1; padding:5px;"><option>Chime</option><option>Bell</option><option>Buzzer</option><option>Pop</option></select>
+                        <button class="btn-add" onclick="testSound()">Play</button>
+                    </div>`;
+                renderAlertRecipients();
             } else if (tab === 'network') {
                 title.innerText = "Network Settings";
                 body.innerHTML = `<div class="settings-row"><span>Connection Status:</span><span class="status-indicator status-connected">CONNECTED</span></div>`;
@@ -440,46 +531,46 @@
         }
         function closeSettings() { document.getElementById('settingsOverlay').style.display = 'none'; }
 
-        function addStation() { 
-            const input = document.getElementById('newStationName'); 
-            const name = input.value.trim(); 
-            if (name) { 
-                socket.emit('addStation', name); 
-                input.value = ''; 
-            } 
+        function addStation() {
+            const input = document.getElementById('newStationName');
+            const name = input.value.trim();
+            if (name) {
+                socket.emit('addStation', name);
+                input.value = '';
+            }
         }
         function deleteStation(id) { socket.emit('deleteStation', id); }
-        function renderStationList() { 
-            const list = document.getElementById('stationList'); 
-            list.innerHTML = ''; 
-            stations.forEach(st => { 
-                list.innerHTML += `<div class="settings-row"><span>${esc(st.name)}</span><button class="btn-delete" onclick="deleteStation(${st.id})">Delete</button></div>`; 
-            }); 
+        function renderStationList() {
+            const list = document.getElementById('stationList');
+            list.innerHTML = '';
+            stations.forEach(st => {
+                list.innerHTML += `<div class="settings-row"><span>${esc(st.name)}</span><button class="btn-delete" onclick="deleteStation(${st.id})">Delete</button></div>`;
+            });
         }
-        
-        function addDoctor() { 
-            const input = document.getElementById('newDocName'); 
-            const name = input.value.trim(); 
-            if (name) { 
-                socket.emit('addDoctor', name); 
-                input.value = ''; 
-            } 
+
+        function addDoctor() {
+            const input = document.getElementById('newDocName');
+            const name = input.value.trim();
+            if (name) {
+                socket.emit('addDoctor', name);
+                input.value = '';
+            }
         }
         function deleteDoctor(id) { socket.emit('deleteDoctor', id); }
-        function toggleDoctorWorking(id, element) { 
-            socket.emit('toggleDoctor', id); 
+        function toggleDoctorWorking(id, element) {
+            socket.emit('toggleDoctor', id);
         }
-        function renderDoctorList() { 
-            const list = document.getElementById('docList'); 
-            list.innerHTML = ''; 
-            doctors.forEach(doc => { 
-                list.innerHTML += `<div class="settings-row"><span>${esc(doc.name)}</span><div class="settings-label-group"><span style="font-size: 12px;">Working:</span><div class="toggle-switch ${doc.isWorking ? 'on' : ''}" onclick="toggleDoctorWorking(${doc.id}, this)"></div><button class="btn-delete" onclick="deleteDoctor(${doc.id})">Delete</button></div></div>`; 
-            }); 
+        function renderDoctorList() {
+            const list = document.getElementById('docList');
+            list.innerHTML = '';
+            doctors.forEach(doc => {
+                list.innerHTML += `<div class="settings-row"><span>${esc(doc.name)}</span><div class="settings-label-group"><span style="font-size: 12px;">Working:</span><div class="toggle-switch ${doc.isWorking ? 'on' : ''}" onclick="toggleDoctorWorking(${doc.id}, this)"></div><button class="btn-delete" onclick="deleteDoctor(${doc.id})">Delete</button></div></div>`;
+            });
         }
-        
-        function renderCategorySettings() { 
-            const list = document.getElementById('catListSettings'); 
-            list.innerHTML = ''; 
+
+        function renderCategorySettings() {
+            const list = document.getElementById('catListSettings');
+            list.innerHTML = '';
             const sounds = ['None', 'Chime', 'Buzzer', 'Bell', 'Pop'];
             categories.forEach(cat => {
                 const opts = sounds.map(s => `<option value="${s}" ${s === cat.sound ? 'selected' : ''}>${s}</option>`).join('');
@@ -491,59 +582,226 @@
                     <select onchange="updateCategory(${cat.id}, 'sound', this.value)">${opts}</select>
                     <button class="btn-delete" onclick="deleteCategory(${cat.id})">Delete</button>
                 </div>`;
-            }); 
+            });
         }
-        function toggleSound(setting, element) { soundSettings[setting] = !soundSettings[setting]; element.classList.toggle('on'); }
+
+        function renderAlertRecipients() {
+            const list = document.getElementById('alertList');
+            if (!list) return;
+            list.innerHTML = '';
+            const working = doctors.filter(d => d.isWorking).map(d => d.name);
+            working.forEach(name => {
+                list.innerHTML += `<div class="settings-row"><span>${esc(name)} <span style="color:#7f8c8d; font-size:11px;">(working doctor)</span></span></div>`;
+            });
+            alertRecipients.forEach(name => {
+                list.innerHTML += `<div class="settings-row"><span>${esc(name)}</span><button class="btn-delete" onclick="removeAlertRecipient('${esc(name)}')">Remove</button></div>`;
+            });
+            if (working.length === 0 && alertRecipients.length === 0) {
+                list.innerHTML = '<div style="color:#c0392b; font-size:12px; padding:8px 0;">Nobody is set to receive expiry alerts.</div>';
+            }
+        }
+
+        function addAlertRecipient() {
+            const input = document.getElementById('newAlertName');
+            const name = input.value.trim();
+            if (name) { socket.emit('addAlertRecipient', name); input.value = ''; }
+        }
+
+        function removeAlertRecipient(name) { socket.emit('removeAlertRecipient', name); }
+
+        function toggleSound(setting, element) {
+            soundSettings[setting] = !soundSettings[setting];
+            element.classList.toggle('on');
+            // Per-computer, and remembered. A room with a patient in it can stay
+            // quiet without silencing the front desk.
+            localStorage.setItem('dchat_sound_settings', JSON.stringify(soundSettings));
+        }
+
+        function testSound() { playSound(document.getElementById('testSoundPick').value); }
 
         // MESSAGING LOGIC
-        function openMsgBox(type) {
+        // Messages carry a threadId. A reply reuses the threadId of whatever it
+        // answers, so a back-and-forth stays as one conversation in the Inbox.
+
+        let currentThreadId = null;   // set while replying, null for a new message
+
+        // Names to offer as recipients: every station, plus anyone who has
+        // written to us whose name isn't a station (people type their own).
+        function knownRecipients(extra) {
+            const names = stations.map(s => s.name);
+            (extra || []).forEach(n => { if (n && !names.includes(n)) names.push(n); });
+            inboxMessages.forEach(m => {
+                if (m.from && m.from !== 'Med Alert' && !names.includes(m.from)) names.push(m.from);
+            });
+            return names.filter(n => n !== getMyName());
+        }
+
+        function openMsgBox(type, opts) {
+            opts = opts || {};
             currentMsgType = type;
-            document.getElementById('msgBoxTitle').innerText = type === 'broadcast' ? "Broadcast to All" : "Private Message";
+            currentThreadId = opts.threadId || null;
+
+            document.getElementById('msgBoxTitle').innerText =
+                opts.title || (type === 'broadcast' ? "Broadcast to All" : "Private Message");
+
             const targetList = document.getElementById('msgTargetList');
             targetList.innerHTML = '';
+
             if (type === 'private') {
-                stations.forEach(st => { targetList.innerHTML += `<label><input type="checkbox" class="msg-target-check" value="${esc(st.name)}"> ${esc(st.name)}</label>`; });
+                const preselect = opts.preselect || [];
+                knownRecipients(preselect).forEach(name => {
+                    const checked = preselect.includes(name) ? 'checked' : '';
+                    targetList.innerHTML += `<label><input type="checkbox" class="msg-target-check" value="${esc(name)}" ${checked}> ${esc(name)}</label>`;
+                });
                 targetList.style.display = 'block';
-            } else { targetList.style.display = 'none'; }
+            } else {
+                targetList.style.display = 'none';
+            }
+
             document.getElementById('msgContent').value = '';
             document.getElementById('msgBox').style.display = 'flex';
+            document.getElementById('msgContent').focus();
         }
-        function closeMsgBox() { document.getElementById('msgBox').style.display = 'none'; }
+
+        function closeMsgBox() {
+            document.getElementById('msgBox').style.display = 'none';
+            currentThreadId = null;
+        }
+
         function sendMsg() {
             const content = document.getElementById('msgContent').value.trim();
             if (!content) return;
+            if (!getMyName()) {
+                alert("Enter your name in the box at the top right first, so people know who wrote this.");
+                return;
+            }
+
             let targets = [];
             if (currentMsgType === 'private') {
                 document.querySelectorAll('.msg-target-check:checked').forEach(cb => targets.push(cb.value));
-                if (targets.length === 0) return;
+                if (targets.length === 0) {
+                    alert("Tick at least one person to send this to.");
+                    return;
+                }
             }
-            const msg = { id: Date.now(), type: currentMsgType, from: getMyName(), target: targets, content: content, time: new Date().toLocaleTimeString() };
+
+            const now = Date.now();
+            const msg = {
+                id: now,
+                ts: now,
+                threadId: currentThreadId || now,   // new conversation, or continue one
+                type: currentMsgType,
+                from: getMyName(),
+                target: targets,
+                content: content,
+                time: new Date().toLocaleTimeString()
+            };
+
             socket.emit('sendMessage', msg);
+            // Keep our own copy so the thread reads as a conversation, not half of one.
+            inboxMessages.push(msg);
             closeMsgBox();
+            if (document.getElementById('inboxOverlay').style.display === 'flex') openInbox();
         }
-        function receiveMessage(msg) { inboxMessages.unshift(msg); unreadCount++; updateInboxBadge(); }
+
+        function receiveMessage(msg) {
+            inboxMessages.push(msg);
+            unreadCount++;
+            updateInboxBadge();
+            playMessageSound(msg.type === 'private');
+        }
+
         function updateInboxBadge() {
             const badge = document.getElementById('inboxBadge');
-            if (unreadCount > 0) { badge.innerText = `(${unreadCount})`; badge.style.display = 'inline'; } 
+            if (unreadCount > 0) { badge.innerText = `(${unreadCount})`; badge.style.display = 'inline'; }
             else { badge.style.display = 'none'; }
         }
+
+        // Group the flat message list into conversations, newest activity first.
+        function buildThreads() {
+            const byThread = new Map();
+            inboxMessages.forEach(m => {
+                const tid = m.threadId || m.id;
+                if (!byThread.has(tid)) byThread.set(tid, []);
+                byThread.get(tid).push(m);
+            });
+            const threads = [];
+            byThread.forEach((msgs, tid) => {
+                msgs.sort((a, b) => (a.ts || a.id) - (b.ts || b.id));
+                const last = msgs[msgs.length - 1];
+                threads.push({ id: tid, msgs: msgs, last: (last.ts || last.id) });
+            });
+            threads.sort((a, b) => b.last - a.last);
+            return threads;
+        }
+
+        // Everyone involved in a conversation, apart from us.
+        function threadParticipants(msgs) {
+            const me = getMyName();
+            const set = new Set();
+            msgs.forEach(m => {
+                if (m.from) set.add(m.from);
+                (m.target || []).forEach(t => set.add(t));
+            });
+            set.delete(me);
+            return [...set];
+        }
+
         function openInbox() {
             const body = document.getElementById('inboxBody');
+            const me = getMyName();
             body.innerHTML = '';
-            if (inboxMessages.length === 0) { body.innerHTML = '<div style="text-align:center; color:#7f8c8d; margin-top:20px;">Inbox is empty.</div>'; } 
-            else {
-                inboxMessages.forEach(msg => {
-                    const div = document.createElement('div');
-                    div.className = 'inbox-item ' + msg.type;
-                    let targetText = msg.type === 'broadcast' ? "All" : msg.target.join(", ");
-                    let metaText = `${msg.from} to ${targetText}`;
-                    div.innerHTML = `<div class="meta"><span>${esc(metaText)}</span><span>${esc(msg.time)}</span></div><div class="content">${esc(msg.content)}</div>`;
-                    body.appendChild(div);
+
+            const threads = buildThreads();
+            if (threads.length === 0) {
+                body.innerHTML = '<div style="text-align:center; color:#7f8c8d; margin-top:20px;">Inbox is empty.</div>';
+            } else {
+                threads.forEach(thread => {
+                    const isBroadcastOnly = thread.msgs.every(m => m.type === 'broadcast');
+                    const people = threadParticipants(thread.msgs);
+                    const withText = isBroadcastOnly ? 'Everyone' : (people.join(', ') || 'Everyone');
+                    const lastTime = thread.msgs[thread.msgs.length - 1].time;
+
+                    let html = `<div class="thread ${isBroadcastOnly ? '' : 'private'}">
+                        <div class="thread-header"><span class="thread-with">${esc(withText)}</span><span>${esc(lastTime)}</span></div>`;
+
+                    thread.msgs.forEach(m => {
+                        const mine = m.from === me;
+                        html += `<div class="thread-msg ${mine ? 'mine' : ''}">
+                            <div class="who">${mine ? 'You' : esc(m.from)}${m.type === 'broadcast' ? ' - to everyone' : ''}</div>
+                            <div class="body">${esc(m.content)}</div>
+                        </div>`;
+                    });
+
+                    // Nothing to reply to on an automated alert.
+                    const automated = thread.msgs.every(m => m.from === 'Med Alert');
+                    if (!automated && people.length > 0) {
+                        html += `<div class="thread-actions"><button class="thread-reply-btn" onclick="replyToThread(${thread.id})">Reply</button></div>`;
+                    }
+                    html += `</div>`;
+                    body.appendChild(Object.assign(document.createElement('div'), { innerHTML: html }).firstChild);
                 });
             }
+
             document.getElementById('inboxOverlay').style.display = 'flex';
-            unreadCount = 0; updateInboxBadge();
+            unreadCount = 0;
+            updateInboxBadge();
         }
+
+        function replyToThread(threadId) {
+            const thread = buildThreads().find(t => t.id === threadId);
+            if (!thread) return;
+            const people = threadParticipants(thread.msgs);
+            if (people.length === 0) return;
+            closeInbox();
+            // Everyone already in the conversation is ticked. Untick or add as needed.
+            openMsgBox('private', {
+                threadId: threadId,
+                preselect: people,
+                title: "Reply to " + people.join(', ')
+            });
+        }
+
         function closeInbox() { document.getElementById('inboxOverlay').style.display = 'none'; }
 
         // EMERGENCY LOGIC
@@ -558,28 +816,25 @@
         function showEmergencyAlert(stationName) {
             document.getElementById('emergencyStationName').innerText = "Alert from: " + stationName;
             document.getElementById('emergencyOverlay').style.display = 'flex';
+            playEmergency();
         }
         function clearEmergency() { document.getElementById('emergencyOverlay').style.display = 'none'; }
 
-        // SUPPLIES & SYNC LOGIC
+        // SUPPLIES
         function openSuppliesWindow() { window.open('supplies.html', '_blank', 'width=800,height=600'); }
-        function syncUsersToLocalStorage() {
-            let targets = doctors.filter(d => d.isWorking).map(d => d.name);
-            stations.forEach(s => { if (s.name.toLowerCase().includes("manager")) targets.push(s.name); });
-            localStorage.setItem('dchat_alert_targets', JSON.stringify(targets));
-        }
 
         // --- NETWORK LISTENERS ---
         socket.on('syncData', (data) => {
             stations = data.stations;
             doctors = data.doctors;
             categories = data.categories;
+            alertRecipients = data.alertRecipients || [];
             renderGrid();
             renderCategories();
             if (document.getElementById('stationList')) renderStationList();
             if (document.getElementById('docList')) renderDoctorList();
             if (document.getElementById('catListSettings')) renderCategorySettings();
-            syncUsersToLocalStorage();
+            if (document.getElementById('alertList')) renderAlertRecipients();
         });
 
         socket.on('receiveMessage', (msg) => {
@@ -591,8 +846,14 @@
         });
 
         socket.on('statusUpdated', (data) => {
-            if (data.status === null) { delete activeStatus[data.stationId]; } 
-            else { activeStatus[data.stationId] = data.status; }
+            if (data.status === null) {
+                delete activeStatus[data.stationId];
+            } else {
+                activeStatus[data.stationId] = data.status;
+                // Only reaches other computers, so the person who set it
+                // doesn't get chimed at for their own click.
+                playSound(data.status.sound);
+            }
             renderGrid();
         });
 
@@ -616,13 +877,17 @@
         }, 1000);
 
         // Initialize App
+        const savedSound = localStorage.getItem('dchat_sound_settings');
+        if (savedSound) {
+            try { soundSettings = Object.assign(soundSettings, JSON.parse(savedSound)); } catch (e) {}
+        }
+
         const savedName = localStorage.getItem('dchat_my_name');
         if (savedName) {
             document.getElementById('myNameInput').value = savedName;
         }
 
-        renderGrid(); 
+        renderGrid();
     </script>
 </body>
 </html>
-

@@ -24,7 +24,7 @@ function createWindow() {
     mainWindow = new BrowserWindow({
         width: 740,
         height: 400,
-        title: 'Dchat',
+        title: 'Chit-Chat',
         backgroundColor: '#e2e5e9',
         webPreferences: {
             // The UI is plain HTML served over HTTP and uses no Node APIs.
@@ -34,6 +34,18 @@ function createWindow() {
     });
 
     Menu.setApplicationMenu(null);
+
+    // The menu bar is hidden, which also removes the usual reload shortcut.
+    // Put it back so Cmd+R / Ctrl+R / F5 force a fresh copy of the page.
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.type !== 'keyDown') return;
+        const isReload = input.key === 'F5' ||
+            (input.key.toLowerCase() === 'r' && (input.control || input.meta));
+        if (isReload) {
+            mainWindow.webContents.reloadIgnoringCache();
+            event.preventDefault();
+        }
+    });
 
     const config = loadConfig();
 
@@ -46,7 +58,7 @@ function createWindow() {
             if (server.listening) open(); else server.once('listening', open);
             server.on('error', (err) => {
                 const msg = err.code === 'EADDRINUSE'
-                    ? 'Port 3000 is already in use. Another copy of Dchat may already be running on this computer.'
+                    ? 'Port 3000 is already in use. Another copy of Chit-Chat may already be running on this computer.'
                     : err.stack;
                 dialog.showErrorBox('Server Error', msg);
             });
@@ -59,7 +71,7 @@ function createWindow() {
             dialog.showErrorBox(
                 'Cannot Reach Server',
                 `Could not connect to ${config.serverIP}:3000.\n\n` +
-                'Check that the server computer is on and that Windows Firewall allows Dchat.'
+                'Check that the server computer is on and that Windows Firewall allows Chit-Chat.'
             );
         });
     }

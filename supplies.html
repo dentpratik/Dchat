@@ -4,13 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Supply & Med Management</title>
-    <!-- Added Socket.io Script -->
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f7; margin: 0; padding: 20px; }
         .header { background: #2c3e50; color: white; padding: 15px; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center; }
         .header h1 { font-size: 22px; }
-        
+
         /* Tabs */
         .tabs { display: flex; background: white; padding: 0 15px; border-bottom: 2px solid #eee; }
         .tab-btn { padding: 12px 20px; background: #ecf0f1; border: none; cursor: pointer; font-weight: bold; font-size: 14px; border-radius: 5px 5px 0 0; margin-right: 5px; color: #7f8c8d; }
@@ -25,7 +24,7 @@
         .btn-save { background: #2980b9; }
 
         .content-area { background: white; padding: 15px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); min-height: 400px; }
-        
+
         /* Supplies Tab Styles */
         .search-area { display: flex; gap: 10px; flex-direction: column; margin-bottom: 15px; }
         .search-input { padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
@@ -152,19 +151,16 @@
             document.getElementById('tabBtn-meds').classList.toggle('active', tabName === 'meds');
         }
 
-        // --- DENTAL SUPPLIES LOGIC ---
+        // --- DENTAL SUPPLIES LOGIC (shared: lives on the server) ---
         let supplies = [];
-        let nextId = 1;
 
-        function loadSupplies() {
-            const data = localStorage.getItem('dchat_supplies');
-            if (data) {
-                supplies = JSON.parse(data);
-                if (supplies.length > 0) nextId = Math.max(...supplies.map(s => s.id)) + 1;
-            }
+        // Escape user text before it goes into innerHTML.
+        function esc(str) {
+            return String(str == null ? '' : str)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
-        function saveSupplies() { localStorage.setItem('dchat_supplies', JSON.stringify(supplies)); }
-        
+
         function renderSupplies() {
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
             const container = document.getElementById('supplyListContainer');
@@ -184,7 +180,7 @@
             filteredSupplies.forEach(item => {
                 container.innerHTML += `
                     <div class="supply-item">
-                        <span class="supply-name">${item.name}</span>
+                        <span class="supply-name">${esc(item.name)}</span>
                         <div class="status-group">
                             <button class="status-btn btn-green ${item.status === 'green' ? 'active' : ''}" onclick="setStatus(${item.id}, 'green')">Green</button>
                             <button class="status-btn btn-orange ${item.status === 'yellow' ? 'active' : ''}" onclick="setStatus(${item.id}, 'yellow')">Orange</button>
@@ -198,8 +194,8 @@
             const input = document.getElementById('searchInput');
             const name = input.value.trim();
             if (name && !supplies.find(s => s.name.toLowerCase() === name.toLowerCase())) {
-                supplies.push({ id: nextId++, name: name, status: 'green' });
-                saveSupplies(); input.value = ''; renderSupplies();
+                socket.emit('addSupply', name);
+                input.value = '';
             }
         }
 
@@ -210,10 +206,11 @@
                 document.getElementById('greenModalText').innerText = `Are you sure you want to turn ${item.name} green?`;
                 document.getElementById('greenModal').style.display = 'flex';
                 document.getElementById('confirmGreenBtn').onclick = function() {
-                    item.status = 'green'; saveSupplies(); renderSupplies(); closeGreenModal();
+                    socket.emit('setSupplyStatus', { id: id, status: 'green' });
+                    closeGreenModal();
                 };
             } else {
-                item.status = status; saveSupplies(); renderSupplies();
+                socket.emit('setSupplyStatus', { id: id, status: status });
             }
         }
         function closeGreenModal() { document.getElementById('greenModal').style.display = 'none'; }
@@ -226,7 +223,7 @@
                 if (item.status !== 'green') {
                     needsOrder = true;
                     let statusText = item.status === 'yellow' ? "LOW" : "OUT";
-                    printArea.innerHTML += `<div class="print-item"><strong>${item.name}</strong> - ${statusText}</div>`;
+                    printArea.innerHTML += `<div class="print-item"><strong>${esc(item.name)}</strong> - ${statusText}</div>`;
                 }
             });
             if (!needsOrder) printArea.innerHTML += '<div class="print-item">All materials are currently in stock.</div>';
@@ -237,92 +234,62 @@
         function openClearModal() { closeOrderedModal(); document.getElementById('clearModal').style.display = 'flex'; }
         function closeClearModal() { document.getElementById('clearModal').style.display = 'none'; }
         function clearList() {
-            supplies.forEach(item => item.status = 'green');
-            saveSupplies(); renderSupplies(); closeClearModal();
+            socket.emit('clearSupplyList');
+            closeClearModal();
         }
 
-        // --- EMERGENCY MEDS LOGIC ---
+        // --- EMERGENCY MEDS LOGIC (shared: lives on the server) ---
         let meds = [];
-        let nextMedId = 1;
-
-        function loadMeds() {
-            const data = localStorage.getItem('dchat_meds');
-            if (data) {
-                meds = JSON.parse(data);
-                if (meds.length > 0) nextMedId = Math.max(...meds.map(m => m.id)) + 1;
-            }
-        }
-        function saveMeds() { localStorage.setItem('dchat_meds', JSON.stringify(meds)); }
+        // Which rows THIS computer has open for editing. Deliberately local, so
+        // one person editing doesn't flip everyone else's screen into edit mode.
+        let editingMedIds = new Set();
 
         function addMed() {
             const nameInput = document.getElementById('medNameInput');
             const dateInput = document.getElementById('medExpiryInput');
             if (nameInput.value.trim() && dateInput.value) {
-                meds.push({
-                    id: nextMedId++,
-                    name: nameInput.value.trim(),
-                    expiryDate: dateInput.value,
-                    ordered: false,
-                    received: false,
-                    isEditing: false,
-                    lastAlertDate: null
-                });
-                saveMeds();
+                socket.emit('addMed', { name: nameInput.value.trim(), expiryDate: dateInput.value });
                 nameInput.value = ''; dateInput.value = '';
-                renderMeds();
             }
         }
 
         function toggleOrdered(id) {
-            const med = meds.find(m => m.id === id);
-            if (med) { med.ordered = !med.ordered; saveMeds(); renderMeds(); }
+            socket.emit('toggleMedOrdered', id);
         }
 
         function markReceived(id) {
-            const med = meds.find(m => m.id === id);
-            if (med) {
-                med.received = true;
-                med.lastAlertDate = null;
-                med.ordered = false;
-                saveMeds();
-                renderMeds();
-                alert("Med marked as received. Alert system reset.");
-            }
+            socket.emit('markMedReceived', id);
         }
 
         function editMed(id) {
-            const med = meds.find(m => m.id === id);
-            if (med) { med.isEditing = true; renderMeds(); }
+            editingMedIds.add(id);
+            renderMeds();
         }
 
         function saveMedEdit(id) {
             const med = meds.find(m => m.id === id);
-            if (med) {
-                med.name = document.getElementById('editName-'+id).value.trim() || med.name;
-                med.expiryDate = document.getElementById('editDate-'+id).value || med.expiryDate;
-                med.isEditing = false;
-                med.received = false; // Reset states because date changed
-                med.lastAlertDate = null;
-                saveMeds();
-                renderMeds();
-            }
+            if (!med) return;
+            socket.emit('updateMed', {
+                id: id,
+                name: document.getElementById('editName-' + id).value.trim() || med.name,
+                expiryDate: document.getElementById('editDate-' + id).value || med.expiryDate
+            });
+            editingMedIds.delete(id);
         }
 
         function deleteMed(id) {
-            if (confirm("Are you sure you want to delete this emergency med?")) {
-                meds = meds.filter(m => m.id !== id);
-                saveMeds();
-                renderMeds();
+            if (confirm("Delete this emergency med for everyone?")) {
+                socket.emit('deleteMed', id);
             }
         }
 
         function getDaysUntilExpiry(dateStr) {
+            const parts = String(dateStr || '').split('-').map(Number);
+            if (parts.length !== 3 || parts.some(isNaN)) return 0;
+            const expiry = new Date(parts[0], parts[1] - 1, parts[2]);
             const today = new Date();
-            today.setHours(0,0,0,0);
-            const expiry = new Date(dateStr);
-            expiry.setHours(0,0,0,0);
-            const diffTime = expiry - today;
-            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            today.setHours(0, 0, 0, 0);
+            return Math.round((expiry - today) / 86400000);
         }
 
         function renderMeds() {
@@ -337,7 +304,7 @@
                 const daysLeft = getDaysUntilExpiry(med.expiryDate);
                 let badgeClass = "badge-green";
                 let badgeText = "OK";
-                
+
                 if (med.received) {
                     badgeText = "RECEIVED";
                 } else if (daysLeft < 0) {
@@ -348,11 +315,11 @@
                     badgeClass = "badge-orange";
                 }
 
-                if (med.isEditing) {
+                if (editingMedIds.has(med.id)) {
                     container.innerHTML += `
                         <div class="med-item">
                             <div class="edit-row">
-                                <input type="text" id="editName-${med.id}" value="${med.name}" style="flex:1;">
+                                <input type="text" id="editName-${med.id}" value="${esc(med.name)}" style="flex:1;">
                                 <input type="date" id="editDate-${med.id}" value="${med.expiryDate}">
                             </div>
                             <div class="med-actions">
@@ -364,7 +331,7 @@
                     container.innerHTML += `
                         <div class="med-item">
                             <div class="med-info">
-                                <span class="med-name">${med.name}</span>
+                                <span class="med-name">${esc(med.name)}</span>
                                 <span class="med-expiry">Expires: ${med.expiryDate} (${daysLeft} days left)</span>
                                 <span class="med-status-badge ${badgeClass}">${badgeText}</span>
                             </div>
@@ -380,49 +347,36 @@
             });
         }
 
-        // --- DAILY ALERT LOGIC ---
-        function checkMedAlerts() {
-            const todayStr = new Date().toISOString().split('T')[0];
-            const targets = JSON.parse(localStorage.getItem('dchat_alert_targets') || '[]');
-            if (targets.length === 0) return; 
+        // --- LIVE SYNC WITH THE SERVER ---
+        // Every computer gets the same list. One change updates all of them.
+        socket.on('syncData', (data) => {
+            supplies = data.supplies || [];
+            meds = data.meds || [];
+            migrateOldLocalLists();
+            renderSupplies();
+            renderMeds();
+        });
 
-            let alertSent = false;
-
-            meds.forEach(med => {
-                if (med.received) return;
-                const daysLeft = getDaysUntilExpiry(med.expiryDate);
-                
-                if (daysLeft <= 30 && med.lastAlertDate !== todayStr) {
-                    const msg = {
-                        id: Date.now() + Math.random(), 
-                        type: 'private',
-                        from: "System Alert",
-                        target: targets,
-                        content: `EMERGENCY MED ALERT: ${med.name} expires on ${med.expiryDate} (${daysLeft} days left). Please reorder or replace.`,
-                        time: new Date().toLocaleTimeString()
-                    };
-                    
-                    // Emit message to server instead of localStorage
-                    socket.emit('sendMessage', msg);
-                    med.lastAlertDate = todayStr;
-                    alertSent = true;
-                }
-            });
-
-            if (alertSent) {
-                saveMeds();
-                renderMeds();
+        // One-time handover: supplies/meds typed in before the list moved to the
+        // server still sit in this computer's browser storage. Push them up once,
+        // but only while the shared list is empty. The server refuses a second
+        // import, so two computers can't both upload and create duplicates.
+        function migrateOldLocalLists() {
+            if (!localStorage.getItem('dchat_supplies_migrated')) {
+                const old = JSON.parse(localStorage.getItem('dchat_supplies') || '[]');
+                if (old.length > 0 && supplies.length === 0) socket.emit('importSupplies', old);
+                localStorage.setItem('dchat_supplies_migrated', 'yes');
+            }
+            if (!localStorage.getItem('dchat_meds_migrated')) {
+                const old = JSON.parse(localStorage.getItem('dchat_meds') || '[]');
+                if (old.length > 0 && meds.length === 0) socket.emit('importMeds', old);
+                localStorage.setItem('dchat_meds_migrated', 'yes');
             }
         }
 
-        // Initialize
-        loadSupplies();
-        loadMeds();
+        // Initialize. The lists arrive from the server on connect.
         renderSupplies();
         renderMeds();
-        
-        checkMedAlerts();
-        setInterval(checkMedAlerts, 3600000); // Check every hour
     </script>
 </body>
 </html>
