@@ -1,0 +1,53 @@
+{
+  "name": "dchat",
+  "version": "1.0.0",
+  "description": "Dental office communication board",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win"
+  },
+  "keywords": [],
+  "author": "Pratik Patel",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.dental.dchat",
+    "productName": "Dchat",
+    "files": [
+      "main.js",
+      "server.js",
+      "paths.js",
+      "index.html",
+      "supplies.html",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "*.html"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.medical",
+      "identity": null
+    }
+  }
+}

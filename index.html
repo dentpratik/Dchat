@@ -1,0 +1,628 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dchat</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #e2e5e9; }
+
+        .container {
+            width: 700px; height: 350px; background: white; border: 1px solid #95a5a6;
+            display: flex; flex-direction: column; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            overflow: hidden; position: relative;
+        }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 0 10px; height: 30px; background-color: #2c3e50; color: white; font-size: 14px; font-weight: bold; }
+        .header .user-input { background: transparent; border: none; color: white; text-align: right; width: 200px; font-size: 14px; font-weight: normal; outline: none; }
+        .functions { display: flex; gap: 20px; padding: 0 10px; height: 30px; align-items: center; background-color: #f4f6f7; border-bottom: 1px solid #d5dbdb; position: relative; }
+        .functions span { cursor: pointer; color: #2c3e50; font-size: 13px; font-weight: bold; }
+        .functions span:hover { color: #3498db; }
+        .emergency-btn { color: #c0392b !important; font-weight: bold !important; }
+        .menu-dropdown { position: absolute; top: 30px; left: 10px; width: 180px; background: white; border: 1px solid #bdc3c7; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); display: none; z-index: 30; }
+        .menu-dropdown div { padding: 8px 10px; cursor: pointer; font-size: 12px; color: #2c3e50; border-bottom: 1px solid #eee; }
+        .menu-dropdown div:last-child { border-bottom: none; }
+        .menu-dropdown div:hover { background: #ecf0f1; }
+        
+        /* LOCKED GRID: Fixed 8 columns, auto rows */
+        .grid-area { flex: 1; display: grid; grid-template-columns: repeat(8, 1fr); grid-auto-rows: 1fr; gap: 5px; padding: 8px; background-color: #ffffff; position: relative; overflow-y: auto; }
+        .box { border: 1px solid #bdc3c7; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; color: #34495e; background-color: #ecf0f1; cursor: pointer; text-align: center; transition: background 0.2s, border 0.2s, opacity 0.2s; position: relative; overflow: hidden; }
+        .box:hover { border-color: #3498db; }
+        .box.dragging { opacity: 0.4; border: 2px dashed #3498db; }
+        .box .timer { font-size: 9px; font-weight: normal; margin-top: 2px; color: #fff; background: rgba(0,0,0,0.2); padding: 1px 4px; border-radius: 3px; }
+        .box-name-input { width: 90%; font-size: 11px; text-align: center; border: 1px solid #3498db; padding: 2px; }
+        .footer { display: flex; gap: 10px; padding: 8px 10px; height: 50px; background-color: #f4f6f7; border-top: 1px solid #d5dbdb; }
+        .footer button { flex: 1; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; color: white; position: relative; }
+        .footer button:hover { opacity: 0.9; }
+        .btn-broadcast { background-color: #2980b9; }
+        .btn-private { background-color: #8e44ad; }
+        .btn-inbox { background-color: #2c3e50; }
+        .inbox-badge { background: #e74c3c; color: white; border-radius: 10px; padding: 2px 6px; font-size: 10px; margin-left: 5px; display: none; }
+        .working-square { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 190px; height: 260px; background: white; border: 2px solid #2c3e50; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: none; flex-direction: column; padding: 8px; z-index: 20; }
+        .ws-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .ws-title { font-size: 12px; font-weight: bold; color: #2c3e50; flex: 1; }
+        .ws-manage-btn { background: #f39c12; color: white; border: none; border-radius: 3px; cursor: pointer; padding: 2px 5px; font-size: 10px; margin-right: 5px; }
+        .ws-close { background: #e74c3c; color: white; border: none; border-radius: 3px; cursor: pointer; padding: 2px 6px; font-size: 11px; }
+        .ws-doctor-row { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; min-height: 28px; }
+        .ws-doc-btn { padding: 4px 8px; border: 1px solid #bdc3c7; background: #f8f9fa; border-radius: 4px; font-size: 10px; cursor: pointer; font-weight: bold; color: #2c3e50; flex: 1; text-align: center; }
+        .ws-doc-btn:hover { background: #e2e5e9; }
+        .ws-doc-btn.selected { background: #2c3e50; color: white; border-color: #2c3e50; }
+        .ws-categories { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; overflow-y: auto; margin-bottom: 8px; align-content: flex-start; }
+        .ws-cat-chip { padding: 4px 6px; border: none; border-radius: 4px; color: white; font-weight: bold; cursor: pointer; font-size: 10px; text-align: center; position: relative; min-width: 45px; flex: 1 0 40%; }
+        .ws-cat-chip:hover { opacity: 0.85; }
+        .ws-cat-chip .delete-x { display: none; position: absolute; top: -5px; right: -5px; background: #c0392b; color: white; border-radius: 50%; width: 14px; height: 14px; font-size: 9px; line-height: 14px; text-align: center; cursor: pointer; border: 1px solid white; }
+        .ws-cat-chip.editing { border: 1px dashed #fff; }
+        .ws-cat-chip.editing .delete-x { display: block; }
+        .cat-edit-input { width: 100%; font-size: 10px; text-align: center; border: none; background: rgba(255,255,255,0.3); color: white; outline: none; }
+        .ws-add-area { display: flex; gap: 5px; margin-bottom: 8px; }
+        .ws-add-area input { flex: 1; padding: 4px; font-size: 11px; border: 1px solid #bdc3c7; border-radius: 4px; }
+        .ws-add-area button { padding: 4px 8px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .ws-clear-btn { width: 100%; padding: 6px; background: #95a5a6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
+        .ws-clear-btn:hover { background: #7f8c8d; }
+        .msg-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 250px; background: white; border: 2px solid #8e44ad; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: none; flex-direction: column; padding: 10px; z-index: 25; }
+        .msg-box-title { font-size: 14px; font-weight: bold; color: #2c3e50; margin-bottom: 10px; text-align: center; }
+        .msg-box textarea { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; resize: none; height: 50px; }
+        .msg-box-actions { display: flex; gap: 10px; }
+        .msg-box-actions button { flex: 1; padding: 8px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
+        .btn-send { background: #27ae60; }
+        .btn-cancel { background: #95a5a6; }
+        .msg-target-list { max-height: 80px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; margin-bottom: 10px; border-radius: 4px; font-size: 12px; display: none; }
+        .msg-target-list label { display: block; padding: 2px 0; cursor: pointer; }
+        .emergency-confirm { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 250px; background: white; border: 2px solid #c0392b; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: none; flex-direction: column; padding: 10px; z-index: 25; }
+        .emergency-confirm .msg-box-title { color: #c0392b; }
+        .emergency-confirm p { text-align: center; margin-bottom: 10px; font-size: 13px; color: #2c3e50; }
+        .emergency-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #c0392b; display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 100; animation: flash 1s infinite; }
+        @keyframes flash { 0% { background-color: #c0392b; } 50% { background-color: #e74c3c; } 100% { background-color: #c0392b; } }
+        .emergency-text { color: white; text-align: center; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        .emergency-text h1 { font-size: 36px; margin-bottom: 10px; }
+        .emergency-text h2 { font-size: 22px; margin-bottom: 20px; }
+        .emergency-clear-btn { padding: 10px 20px; font-size: 16px; font-weight: bold; background: white; color: #c0392b; border: none; border-radius: 5px; cursor: pointer; }
+        .inbox-overlay, .settings-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #f4f6f7; display: none; flex-direction: column; z-index: 40; }
+        .settings-header { height: 40px; background: #2c3e50; color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; }
+        .settings-header h2 { font-size: 16px; }
+        .settings-back { background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .settings-body, .inbox-body { flex: 1; padding: 15px; overflow-y: auto; }
+        .inbox-item { background: white; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #2980b9; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .inbox-item.private { border-left-color: #8e44ad; }
+        .inbox-item .meta { font-size: 11px; color: #7f8c8d; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        .inbox-item .content { font-size: 14px; color: #2c3e50; }
+        .settings-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #ddd; gap: 10px; }
+        .settings-row input[type="text"] { padding: 5px; flex: 1; border: 1px solid #ccc; border-radius: 4px; }
+        .settings-row button { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
+        .btn-add { background: #27ae60; }
+        .btn-delete { background: #c0392b; }
+        .status-indicator { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
+        .status-connected { background: #27ae60; }
+        .toggle-switch { width: 40px; height: 20px; background: #ccc; border-radius: 10px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+        .toggle-switch.on { background: #27ae60; }
+        .toggle-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: white; border-radius: 50%; transition: transform 0.2s; }
+        .toggle-switch.on::after { transform: translateX(20px); }
+        .settings-label-group { display: flex; align-items: center; gap: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <span>Dchat</span>
+            <input type="text" class="user-input" id="myNameInput" placeholder="Enter your name..." onchange="updateMyName()">
+        </div>
+        <div class="functions">
+            <span onclick="toggleMenu(event)">Menu</span>
+            <span class="emergency-btn" onclick="triggerEmergency()">Emergency</span>
+            <span onclick="openSuppliesWindow()">Supplies</span>
+            <span>Schedule</span>
+            <span>Settings</span>
+            <div class="menu-dropdown" id="menuDropdown">
+                <div onclick="openSettings('stations')">1. Manage Stations</div>
+                <div onclick="openSettings('categories')">2. Manage Categories</div>
+                <div onclick="openSettings('doctors')">3. Manage Doctors</div>
+                <div onclick="openSettings('sounds')">4. Sound & Alert Settings</div>
+                <div onclick="openSettings('network')">5. Network Settings</div>
+            </div>
+        </div>
+        <div class="grid-area" id="gridArea"></div>
+        <div class="footer">
+            <button class="btn-broadcast" onclick="openMsgBox('broadcast')">Broadcast (All)</button>
+            <button class="btn-private" onclick="openMsgBox('private')">Private Message</button>
+            <button class="btn-inbox" onclick="openInbox()">Inbox <span class="inbox-badge" id="inboxBadge">0</span></button>
+        </div>
+        <div class="working-square" id="workingSquare">
+            <div class="ws-header">
+                <span class="ws-title" id="wsTitle">Set Status</span>
+                <button class="ws-manage-btn" onclick="toggleEditMode()">Manage</button>
+                <button class="ws-close" onclick="closeWS()">X</button>
+            </div>
+            <div class="ws-doctor-row" id="wsDoctorRow"></div>
+            <div class="ws-categories" id="wsCategories"></div>
+            <div class="ws-add-area">
+                <input type="text" id="newCatInput" placeholder="Add category...">
+                <button onclick="addCategory()">Add</button>
+            </div>
+            <button class="ws-clear-btn" onclick="clearStatus()">Clear Status</button>
+        </div>
+        <div class="msg-box" id="msgBox">
+            <div class="msg-box-title" id="msgBoxTitle">Send Message</div>
+            <div class="msg-target-list" id="msgTargetList"></div>
+            <textarea id="msgContent" placeholder="Type your message here..."></textarea>
+            <div class="msg-box-actions">
+                <button class="btn-cancel" onclick="closeMsgBox()">Cancel</button>
+                <button class="btn-send" onclick="sendMsg()">Send</button>
+            </div>
+        </div>
+        <div class="emergency-confirm" id="emergencyConfirm">
+            <div class="msg-box-title">EMERGENCY ALERT</div>
+            <p>Are you sure you have an emergency?</p>
+            <p style="font-size: 11px; color: red; margin-bottom: 15px;">This will alert ALL connected computers immediately.</p>
+            <div class="msg-box-actions">
+                <button class="btn-cancel" onclick="closeEmergencyConfirm()">No, Cancel</button>
+                <button style="background: #c0392b;" onclick="sendEmergency()">Yes, Alert All</button>
+            </div>
+        </div>
+        <div class="emergency-overlay" id="emergencyOverlay">
+            <div class="emergency-text">
+                <h1>EMERGENCY</h1>
+                <h2 id="emergencyStationName">Alert from: Dr. Smith</h2>
+                <button class="emergency-clear-btn" onclick="clearEmergency()">ACKNOWLEDGE & CLEAR</button>
+            </div>
+        </div>
+        <div class="inbox-overlay" id="inboxOverlay">
+            <div class="settings-header">
+                <h2>Inbox</h2>
+                <button class="settings-back" onclick="closeInbox()">Back to Dchat</button>
+            </div>
+            <div class="inbox-body" id="inboxBody"></div>
+        </div>
+        <div class="settings-overlay" id="settingsOverlay">
+            <div class="settings-header">
+                <h2 id="settingsTitle">Settings</h2>
+                <button class="settings-back" onclick="closeSettings()">Back to Dchat</button>
+            </div>
+            <div class="settings-body" id="settingsBody"></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // State Management
+        let stations = [];
+        let doctors = [];
+        let categories = [];
+        
+        let activeStatus = {}; 
+        let currentWSStation = null;
+        let isEditMode = false;
+        let selectedDoctorInWS = ""; 
+        let soundSettings = { muteAll: false, broadcastSound: true, privateMessageSound: true };
+
+        let currentMsgType = ""; 
+        let inboxMessages = [];
+        let unreadCount = 0;
+
+        let pressTimer;
+        let canDrag = false;
+
+        // Names and messages are user text; never drop them into innerHTML raw.
+        function esc(str) {
+            return String(str == null ? '' : str)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function getMyName() { return document.getElementById('myNameInput').value.trim(); }
+        function updateMyName() { 
+            const name = getMyName();
+            if (name) { 
+                socket.emit('registerName', name); 
+                localStorage.setItem('dchat_my_name', name); 
+            }
+            syncUsersToLocalStorage(); 
+        }
+
+        socket.on('nameTaken', (name) => {
+            alert(`The name "${name}" is already in use on another computer. Please choose a different name.`);
+            document.getElementById('myNameInput').value = "";
+        });
+
+        function getDoctorAbbr(name) {
+            const parts = name.split(' ');
+            if (parts.length > 1) return parts[0] + ' ' + parts[1].charAt(0) + '.';
+            return name.charAt(0) + '.';
+        }
+
+        // Render Grid
+        function renderGrid() {
+            const grid = document.getElementById('gridArea');
+            grid.innerHTML = '';
+            if (stations.length === 0) return; 
+            
+            // Locked to 8 columns so the grid doesn't shift when adding/removing
+            const cols = 8; 
+            grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+            stations.forEach(station => {
+                const box = document.createElement('div');
+                box.className = 'box';
+                box.id = 'box-' + station.id;
+                box.draggable = false; 
+                box.dataset.stationId = station.id;
+                
+                let status = activeStatus[station.id];
+                if (status) {
+                    box.style.backgroundColor = status.color;
+                    box.style.borderColor = status.color;
+                    box.style.color = "white";
+                }
+
+                box.innerHTML = `<span class="box-name" ondblclick="editName(event, ${station.id})">${esc(station.name)}</span>`;
+                if (status) {
+                    const timerSpan = document.createElement('span');
+                    timerSpan.className = 'timer';
+                    timerSpan.id = 'timer-' + station.id;
+                    box.appendChild(timerSpan);
+                }
+
+                box.onclick = () => {
+                    if (canDrag) return; 
+                    if (activeStatus[station.id]) clearStatusInstant(station.id);
+                    else openWS(station.id);
+                };
+
+                box.onmousedown = (e) => {
+                    if (e.target.classList.contains('box-name') || e.target.tagName === 'INPUT') return; 
+                    pressTimer = setTimeout(() => {
+                        canDrag = true; box.draggable = true; box.classList.add('dragging');
+                    }, 3000);
+                };
+
+                box.onmouseup = () => {
+                    clearTimeout(pressTimer);
+                    if (canDrag) { canDrag = false; box.draggable = false; box.classList.remove('dragging'); }
+                };
+                box.onmouseleave = () => clearTimeout(pressTimer);
+                box.ondragstart = (e) => { if (!canDrag) { e.preventDefault(); return; } e.dataTransfer.setData('text/plain', station.id); };
+                box.ondragover = (e) => e.preventDefault();
+                box.ondrop = (e) => {
+                    e.preventDefault();
+                    const targetId = parseInt(e.dataTransfer.getData('text/plain'));
+                    if (targetId !== station.id) {
+                        const draggedIndex = stations.findIndex(s => s.id === targetId);
+                        const targetIndex = stations.findIndex(s => s.id === station.id);
+                        const temp = stations[draggedIndex];
+                        stations[draggedIndex] = stations[targetIndex];
+                        stations[targetIndex] = temp;
+                        renderGrid(); 
+                        
+                        socket.emit('updateStationOrder', stations.map(s => s.id));
+                    }
+                };
+                grid.appendChild(box);
+            });
+        }
+
+        function clearStatusInstant(id) { 
+            delete activeStatus[id]; 
+            renderGrid(); 
+            socket.emit('updateStatus', { stationId: id, status: null });
+        }
+
+        function editName(event, id) {
+            event.stopPropagation();
+            const station = stations.find(s => s.id === id);
+            const box = document.getElementById('box-' + id);
+            const nameSpan = box.querySelector('.box-name');
+            const input = document.createElement('input');
+            input.type = 'text'; input.className = 'box-name-input'; input.value = station.name;
+            nameSpan.replaceWith(input); input.focus(); input.select();
+            const saveName = () => { 
+                const newName = input.value.trim() || station.name;
+                socket.emit('updateStationName', { id: id, name: newName });
+            };
+            input.onblur = saveName;
+            input.onkeydown = (e) => { if(e.key === 'Enter') saveName(); };
+        }
+
+        // WS Logic
+        function openWS(stationId) {
+            currentWSStation = stationId;
+            const station = stations.find(s => s.id === stationId);
+            document.getElementById('wsTitle').innerText = "Status: " + station.name;
+            isEditMode = false; selectedDoctorInWS = ""; 
+            const docRow = document.getElementById('wsDoctorRow');
+            docRow.innerHTML = '';
+            doctors.forEach(doc => {
+                if (doc.isWorking) {
+                    const btn = document.createElement('div');
+                    btn.className = 'ws-doc-btn';
+                    btn.innerText = getDoctorAbbr(doc.name);
+                    btn.onclick = () => selectDoctorInWS(doc.name, btn);
+                    docRow.appendChild(btn);
+                }
+            });
+            renderCategories();
+            document.getElementById('workingSquare').style.display = 'flex';
+        }
+
+        function selectDoctorInWS(name, element) {
+            if (selectedDoctorInWS === name) { selectedDoctorInWS = ""; element.classList.remove('selected'); }
+            else {
+                selectedDoctorInWS = name;
+                document.querySelectorAll('.ws-doc-btn').forEach(b => b.classList.remove('selected'));
+                element.classList.add('selected');
+            }
+        }
+
+        function closeWS() { document.getElementById('workingSquare').style.display = 'none'; currentWSStation = null; }
+        function toggleEditMode() { isEditMode = !isEditMode; renderCategories(); }
+
+        function renderCategories() {
+            const list = document.getElementById('wsCategories');
+            list.innerHTML = '';
+            categories.forEach(cat => {
+                const chip = document.createElement('div');
+                chip.className = 'ws-cat-chip' + (isEditMode ? ' editing' : '');
+                chip.style.backgroundColor = cat.color;
+                if (isEditMode) {
+                    chip.innerHTML = `<span class="delete-x" onclick="event.stopPropagation(); deleteCategory(${cat.id})">X</span><span class="cat-name">${esc(cat.name)}</span>`;
+                } else {
+                    chip.innerText = cat.name; chip.onclick = () => selectCategory(cat);
+                }
+                list.appendChild(chip);
+            });
+        }
+
+        function deleteCategory(id) {
+            const cat = categories.find(c => c.id === id);
+            if (cat && !confirm(`Delete the "${cat.name}" category for everyone?`)) return;
+            socket.emit('deleteCategory', id);
+        }
+
+        function updateCategory(id, field, value) {
+            socket.emit('updateCategory', { id: id, [field]: value });
+        }
+        
+        function addCategory() {
+            const input = document.getElementById('newCatInput');
+            const newCatName = input.value.trim();
+            if (newCatName) {
+                socket.emit('addCategory', newCatName);
+                input.value = '';
+            }
+        }
+
+        function selectCategory(cat) {
+            if (currentWSStation) {
+                const stationId = currentWSStation;
+                activeStatus[stationId] = { category: cat.name, color: cat.color, sound: cat.sound, doctor: selectedDoctorInWS, startTime: Date.now() };
+                renderGrid(); 
+                closeWS();
+                socket.emit('updateStatus', { stationId: stationId, status: activeStatus[stationId] });
+            }
+        }
+        function clearStatus() { if (currentWSStation) { clearStatusInstant(currentWSStation); closeWS(); } }
+
+        // Menu Logic
+        function toggleMenu(event) {
+            event.stopPropagation();
+            const dropdown = document.getElementById('menuDropdown');
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+        }
+        document.addEventListener('click', () => document.getElementById('menuDropdown').style.display = 'none');
+
+        // Settings Logic 
+        function openSettings(tab) {
+            document.getElementById('menuDropdown').style.display = 'none';
+            const body = document.getElementById('settingsBody');
+            const title = document.getElementById('settingsTitle');
+            body.innerHTML = ''; 
+
+            if (tab === 'stations') {
+                title.innerText = "Manage Stations";
+                body.innerHTML = `<div style="margin-bottom: 15px; display: flex; gap: 10px;"><input type="text" id="newStationName" placeholder="New Station Name" style="flex:1; padding:5px;"><button class="btn-add" onclick="addStation()">Add Station</button></div><div id="stationList"></div>`;
+                renderStationList();
+            } else if (tab === 'doctors') {
+                title.innerText = "Manage Doctors";
+                body.innerHTML = `<div style="margin-bottom: 15px; display: flex; gap: 10px;"><input type="text" id="newDocName" placeholder="New Doctor Name" style="flex:1; padding:5px;"><button class="btn-add" onclick="addDoctor()">Add Doctor</button></div><div id="docList"></div>`;
+                renderDoctorList();
+            } else if (tab === 'categories') {
+                title.innerText = "Manage Categories";
+                body.innerHTML = `<div id="catListSettings"></div>`; renderCategorySettings();
+            } else if (tab === 'sounds') {
+                title.innerText = "Sound & Alert Settings";
+                body.innerHTML = `<div class="settings-row"><span>Mute All Sounds</span><div class="toggle-switch ${soundSettings.muteAll ? 'on' : ''}" onclick="toggleSound('muteAll', this)"></div></div>`;
+            } else if (tab === 'network') {
+                title.innerText = "Network Settings";
+                body.innerHTML = `<div class="settings-row"><span>Connection Status:</span><span class="status-indicator status-connected">CONNECTED</span></div>`;
+            }
+            document.getElementById('settingsOverlay').style.display = 'flex';
+        }
+        function closeSettings() { document.getElementById('settingsOverlay').style.display = 'none'; }
+
+        function addStation() { 
+            const input = document.getElementById('newStationName'); 
+            const name = input.value.trim(); 
+            if (name) { 
+                socket.emit('addStation', name); 
+                input.value = ''; 
+            } 
+        }
+        function deleteStation(id) { socket.emit('deleteStation', id); }
+        function renderStationList() { 
+            const list = document.getElementById('stationList'); 
+            list.innerHTML = ''; 
+            stations.forEach(st => { 
+                list.innerHTML += `<div class="settings-row"><span>${esc(st.name)}</span><button class="btn-delete" onclick="deleteStation(${st.id})">Delete</button></div>`; 
+            }); 
+        }
+        
+        function addDoctor() { 
+            const input = document.getElementById('newDocName'); 
+            const name = input.value.trim(); 
+            if (name) { 
+                socket.emit('addDoctor', name); 
+                input.value = ''; 
+            } 
+        }
+        function deleteDoctor(id) { socket.emit('deleteDoctor', id); }
+        function toggleDoctorWorking(id, element) { 
+            socket.emit('toggleDoctor', id); 
+        }
+        function renderDoctorList() { 
+            const list = document.getElementById('docList'); 
+            list.innerHTML = ''; 
+            doctors.forEach(doc => { 
+                list.innerHTML += `<div class="settings-row"><span>${esc(doc.name)}</span><div class="settings-label-group"><span style="font-size: 12px;">Working:</span><div class="toggle-switch ${doc.isWorking ? 'on' : ''}" onclick="toggleDoctorWorking(${doc.id}, this)"></div><button class="btn-delete" onclick="deleteDoctor(${doc.id})">Delete</button></div></div>`; 
+            }); 
+        }
+        
+        function renderCategorySettings() { 
+            const list = document.getElementById('catListSettings'); 
+            list.innerHTML = ''; 
+            const sounds = ['None', 'Chime', 'Buzzer', 'Bell', 'Pop'];
+            categories.forEach(cat => {
+                const opts = sounds.map(s => `<option value="${s}" ${s === cat.sound ? 'selected' : ''}>${s}</option>`).join('');
+                list.innerHTML += `<div class="settings-row" style="flex-wrap: wrap;">
+                    <input type="text" value="${esc(cat.name)}" style="flex:1; min-width: 100px;"
+                           onchange="updateCategory(${cat.id}, 'name', this.value)">
+                    <input type="color" value="${esc(cat.color)}" style="width: 40px; height: 30px; padding: 0; border: none;"
+                           onchange="updateCategory(${cat.id}, 'color', this.value)">
+                    <select onchange="updateCategory(${cat.id}, 'sound', this.value)">${opts}</select>
+                    <button class="btn-delete" onclick="deleteCategory(${cat.id})">Delete</button>
+                </div>`;
+            }); 
+        }
+        function toggleSound(setting, element) { soundSettings[setting] = !soundSettings[setting]; element.classList.toggle('on'); }
+
+        // MESSAGING LOGIC
+        function openMsgBox(type) {
+            currentMsgType = type;
+            document.getElementById('msgBoxTitle').innerText = type === 'broadcast' ? "Broadcast to All" : "Private Message";
+            const targetList = document.getElementById('msgTargetList');
+            targetList.innerHTML = '';
+            if (type === 'private') {
+                stations.forEach(st => { targetList.innerHTML += `<label><input type="checkbox" class="msg-target-check" value="${esc(st.name)}"> ${esc(st.name)}</label>`; });
+                targetList.style.display = 'block';
+            } else { targetList.style.display = 'none'; }
+            document.getElementById('msgContent').value = '';
+            document.getElementById('msgBox').style.display = 'flex';
+        }
+        function closeMsgBox() { document.getElementById('msgBox').style.display = 'none'; }
+        function sendMsg() {
+            const content = document.getElementById('msgContent').value.trim();
+            if (!content) return;
+            let targets = [];
+            if (currentMsgType === 'private') {
+                document.querySelectorAll('.msg-target-check:checked').forEach(cb => targets.push(cb.value));
+                if (targets.length === 0) return;
+            }
+            const msg = { id: Date.now(), type: currentMsgType, from: getMyName(), target: targets, content: content, time: new Date().toLocaleTimeString() };
+            socket.emit('sendMessage', msg);
+            closeMsgBox();
+        }
+        function receiveMessage(msg) { inboxMessages.unshift(msg); unreadCount++; updateInboxBadge(); }
+        function updateInboxBadge() {
+            const badge = document.getElementById('inboxBadge');
+            if (unreadCount > 0) { badge.innerText = `(${unreadCount})`; badge.style.display = 'inline'; } 
+            else { badge.style.display = 'none'; }
+        }
+        function openInbox() {
+            const body = document.getElementById('inboxBody');
+            body.innerHTML = '';
+            if (inboxMessages.length === 0) { body.innerHTML = '<div style="text-align:center; color:#7f8c8d; margin-top:20px;">Inbox is empty.</div>'; } 
+            else {
+                inboxMessages.forEach(msg => {
+                    const div = document.createElement('div');
+                    div.className = 'inbox-item ' + msg.type;
+                    let targetText = msg.type === 'broadcast' ? "All" : msg.target.join(", ");
+                    let metaText = `${msg.from} to ${targetText}`;
+                    div.innerHTML = `<div class="meta"><span>${esc(metaText)}</span><span>${esc(msg.time)}</span></div><div class="content">${esc(msg.content)}</div>`;
+                    body.appendChild(div);
+                });
+            }
+            document.getElementById('inboxOverlay').style.display = 'flex';
+            unreadCount = 0; updateInboxBadge();
+        }
+        function closeInbox() { document.getElementById('inboxOverlay').style.display = 'none'; }
+
+        // EMERGENCY LOGIC
+        function triggerEmergency() { document.getElementById('emergencyConfirm').style.display = 'flex'; }
+        function closeEmergencyConfirm() { document.getElementById('emergencyConfirm').style.display = 'none'; }
+        function sendEmergency() {
+            const emergencyData = { station: getMyName(), time: new Date().toLocaleTimeString() };
+            socket.emit('sendEmergency', emergencyData);
+            showEmergencyAlert(emergencyData.station);
+            closeEmergencyConfirm();
+        }
+        function showEmergencyAlert(stationName) {
+            document.getElementById('emergencyStationName').innerText = "Alert from: " + stationName;
+            document.getElementById('emergencyOverlay').style.display = 'flex';
+        }
+        function clearEmergency() { document.getElementById('emergencyOverlay').style.display = 'none'; }
+
+        // SUPPLIES & SYNC LOGIC
+        function openSuppliesWindow() { window.open('supplies.html', '_blank', 'width=800,height=600'); }
+        function syncUsersToLocalStorage() {
+            let targets = doctors.filter(d => d.isWorking).map(d => d.name);
+            stations.forEach(s => { if (s.name.toLowerCase().includes("manager")) targets.push(s.name); });
+            localStorage.setItem('dchat_alert_targets', JSON.stringify(targets));
+        }
+
+        // --- NETWORK LISTENERS ---
+        socket.on('syncData', (data) => {
+            stations = data.stations;
+            doctors = data.doctors;
+            categories = data.categories;
+            renderGrid();
+            renderCategories();
+            if (document.getElementById('stationList')) renderStationList();
+            if (document.getElementById('docList')) renderDoctorList();
+            if (document.getElementById('catListSettings')) renderCategorySettings();
+            syncUsersToLocalStorage();
+        });
+
+        socket.on('receiveMessage', (msg) => {
+            if (msg.type === 'broadcast' || (Array.isArray(msg.target) && msg.target.includes(getMyName()))) { receiveMessage(msg); }
+        });
+
+        socket.on('receiveEmergency', (emergencyData) => {
+            showEmergencyAlert(emergencyData.station);
+        });
+
+        socket.on('statusUpdated', (data) => {
+            if (data.status === null) { delete activeStatus[data.stationId]; } 
+            else { activeStatus[data.stationId] = data.status; }
+            renderGrid();
+        });
+
+        socket.on('connect', () => {
+            if (getMyName()) { socket.emit('registerName', getMyName()); }
+        });
+
+        // Timer Loop
+        setInterval(() => {
+            for (let id in activeStatus) {
+                const timerSpan = document.getElementById('timer-' + id);
+                if (timerSpan) {
+                    const elapsed = Date.now() - activeStatus[id].startTime;
+                    const minutes = Math.floor(elapsed / 60000);
+                    let displayText = activeStatus[id].category;
+                    if (activeStatus[id].doctor) displayText += ` - ${activeStatus[id].doctor}`;
+                    displayText += ` (${minutes}m)`;
+                    timerSpan.innerText = displayText;
+                }
+            }
+        }, 1000);
+
+        // Initialize App
+        const savedName = localStorage.getItem('dchat_my_name');
+        if (savedName) {
+            document.getElementById('myNameInput').value = savedName;
+        }
+
+        renderGrid(); 
+    </script>
+</body>
+</html>
+

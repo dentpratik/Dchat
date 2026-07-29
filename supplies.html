@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supply & Med Management</title>
+    <!-- Added Socket.io Script -->
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f7; margin: 0; padding: 20px; }
+        .header { background: #2c3e50; color: white; padding: 15px; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; }
+        
+        /* Tabs */
+        .tabs { display: flex; background: white; padding: 0 15px; border-bottom: 2px solid #eee; }
+        .tab-btn { padding: 12px 20px; background: #ecf0f1; border: none; cursor: pointer; font-weight: bold; font-size: 14px; border-radius: 5px 5px 0 0; margin-right: 5px; color: #7f8c8d; }
+        .tab-btn.active { background: #2c3e50; color: white; }
+
+        .btn { border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; padding: 8px 12px; font-size: 13px; margin-left: 5px; }
+        .btn-print { background: #2980b9; }
+        .btn-add { background: #27ae60; }
+        .btn-received { background: #8e44ad; }
+        .btn-edit { background: #f39c12; }
+        .btn-delete { background: #c0392b; }
+        .btn-save { background: #2980b9; }
+
+        .content-area { background: white; padding: 15px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); min-height: 400px; }
+        
+        /* Supplies Tab Styles */
+        .search-area { display: flex; gap: 10px; flex-direction: column; margin-bottom: 15px; }
+        .search-input { padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+        .add-prompt { background: #e8f8f5; padding: 10px; border-radius: 4px; border: 1px dashed #1abc9c; color: #16a085; font-size: 14px; cursor: pointer; display: none; }
+        .supply-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .supply-name { font-size: 16px; font-weight: bold; color: #2c3e50; flex: 1; }
+        .status-group { display: flex; gap: 5px; }
+        .status-btn { width: 60px; text-align: center; padding: 6px; border: 2px solid #ddd; background: white; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; color: #7f8c8d; }
+        .btn-green.active { background: #2ecc71; border-color: #27ae60; color: white; }
+        .btn-orange.active { background: #f39c12; border-color: #e67e22; color: white; }
+        .btn-red.active { background: #c0392b; border-color: #c0392b; color: white; }
+
+        /* Meds Tab Styles */
+        .med-add-area { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
+        .med-add-area input { padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+        .med-item { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid #eee; }
+        .med-info { display: flex; flex-direction: column; gap: 4px; }
+        .med-name { font-size: 16px; font-weight: bold; color: #2c3e50; }
+        .med-expiry { font-size: 13px; color: #7f8c8d; }
+        .med-status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; width: fit-content; }
+        .badge-green { background: #2ecc71; }
+        .badge-orange { background: #f39c12; }
+        .badge-red { background: #c0392b; }
+        .med-actions { display: flex; gap: 5px; align-items: center; }
+        .med-actions label { font-size: 14px; cursor: pointer; margin-right: 10px; }
+        .edit-row { display: flex; gap: 10px; align-items: center; width: 100%; }
+        .edit-row input { padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+
+        /* Modals */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 100; }
+        .modal-box { background: white; padding: 20px; border-radius: 8px; width: 350px; text-align: center; }
+        .modal-box h2 { margin-bottom: 10px; color: #2c3e50; }
+        .modal-box p { margin-bottom: 20px; color: #7f8c8d; font-size: 14px; }
+        .modal-actions { display: flex; gap: 10px; }
+        .modal-actions button { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; }
+        .btn-yes { background: #27ae60; color: white; }
+        .btn-no { background: #95a5a6; color: white; }
+
+        @media print {
+            body * { visibility: hidden; }
+            #printArea, #printArea * { visibility: visible; }
+            #printArea { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; display: block !important; }
+            .print-item { font-size: 18px; padding: 10px 0; border-bottom: 1px solid #ccc; }
+        }
+        #printArea { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Inventory Management</h1>
+        <button class="btn btn-print" onclick="startPrintProcess()">Print Supply List</button>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" id="tabBtn-supplies" onclick="showTab('supplies')">Dental Supplies</button>
+        <button class="tab-btn" id="tabBtn-meds" onclick="showTab('meds')">Emergency Meds</button>
+    </div>
+
+    <div class="content-area">
+        <!-- DENTAL SUPPLIES TAB -->
+        <div id="tab-supplies">
+            <div class="search-area">
+                <input type="text" id="searchInput" class="search-input" placeholder="Search materials... (or type a new name to add)" oninput="renderSupplies()">
+                <div class="add-prompt" id="addPrompt" onclick="addSupply()"></div>
+            </div>
+            <div id="supplyListContainer"></div>
+        </div>
+
+        <!-- EMERGENCY MEDS TAB -->
+        <div id="tab-meds" style="display: none;">
+            <div class="med-add-area">
+                <input type="text" id="medNameInput" placeholder="Med Name (e.g., Epinephrine)">
+                <input type="date" id="medExpiryInput">
+                <button class="btn btn-add" onclick="addMed()">Add Med</button>
+            </div>
+            <div id="medListContainer"></div>
+        </div>
+    </div>
+
+    <div id="printArea"></div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="orderedModal">
+        <div class="modal-box">
+            <h2>Confirm Order</h2>
+            <p>Have you ordered the necessary materials?</p>
+            <div class="modal-actions">
+                <button class="btn-no" onclick="closeOrderedModal()">No</button>
+                <button class="btn-yes" onclick="openClearModal()">Yes</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="clearModal">
+        <div class="modal-box">
+            <h2>Clear List</h2>
+            <p>Do you want us to clear the list? (This resets all items to Green/In Stock)</p>
+            <div class="modal-actions">
+                <button class="btn-no" onclick="closeClearModal()">No</button>
+                <button class="btn-yes" onclick="clearList()">Yes, Clear It</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="greenModal">
+        <div class="modal-box">
+            <h2>Change to Green?</h2>
+            <p id="greenModalText">Are you sure?</p>
+            <div class="modal-actions">
+                <button class="btn-no" onclick="closeGreenModal()">No</button>
+                <button class="btn-yes" id="confirmGreenBtn">Yes</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Socket.io connection
+        const socket = io();
+
+        // --- TAB LOGIC ---
+        function showTab(tabName) {
+            document.getElementById('tab-supplies').style.display = tabName === 'supplies' ? 'block' : 'none';
+            document.getElementById('tab-meds').style.display = tabName === 'meds' ? 'block' : 'none';
+            document.getElementById('tabBtn-supplies').classList.toggle('active', tabName === 'supplies');
+            document.getElementById('tabBtn-meds').classList.toggle('active', tabName === 'meds');
+        }
+
+        // --- DENTAL SUPPLIES LOGIC ---
+        let supplies = [];
+        let nextId = 1;
+
+        function loadSupplies() {
+            const data = localStorage.getItem('dchat_supplies');
+            if (data) {
+                supplies = JSON.parse(data);
+                if (supplies.length > 0) nextId = Math.max(...supplies.map(s => s.id)) + 1;
+            }
+        }
+        function saveSupplies() { localStorage.setItem('dchat_supplies', JSON.stringify(supplies)); }
+        
+        function renderSupplies() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const container = document.getElementById('supplyListContainer');
+            const addPrompt = document.getElementById('addPrompt');
+            container.innerHTML = '';
+            const filteredSupplies = supplies.filter(item => item.name.toLowerCase().includes(searchTerm));
+
+            if (searchTerm !== "" && !supplies.some(s => s.name.toLowerCase() === searchTerm)) {
+                addPrompt.style.display = 'block';
+                addPrompt.innerText = `+ Add "${document.getElementById('searchInput').value}" to the list`;
+            } else { addPrompt.style.display = 'none'; }
+
+            if (filteredSupplies.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#95a5a6; padding:20px;">No materials found.</div>';
+                return;
+            }
+            filteredSupplies.forEach(item => {
+                container.innerHTML += `
+                    <div class="supply-item">
+                        <span class="supply-name">${item.name}</span>
+                        <div class="status-group">
+                            <button class="status-btn btn-green ${item.status === 'green' ? 'active' : ''}" onclick="setStatus(${item.id}, 'green')">Green</button>
+                            <button class="status-btn btn-orange ${item.status === 'yellow' ? 'active' : ''}" onclick="setStatus(${item.id}, 'yellow')">Orange</button>
+                            <button class="status-btn btn-red ${item.status === 'red' ? 'active' : ''}" onclick="setStatus(${item.id}, 'red')">Red</button>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        function addSupply() {
+            const input = document.getElementById('searchInput');
+            const name = input.value.trim();
+            if (name && !supplies.find(s => s.name.toLowerCase() === name.toLowerCase())) {
+                supplies.push({ id: nextId++, name: name, status: 'green' });
+                saveSupplies(); input.value = ''; renderSupplies();
+            }
+        }
+
+        function setStatus(id, status) {
+            const item = supplies.find(s => s.id === id);
+            if (!item) return;
+            if (status === 'green' && item.status !== 'green') {
+                document.getElementById('greenModalText').innerText = `Are you sure you want to turn ${item.name} green?`;
+                document.getElementById('greenModal').style.display = 'flex';
+                document.getElementById('confirmGreenBtn').onclick = function() {
+                    item.status = 'green'; saveSupplies(); renderSupplies(); closeGreenModal();
+                };
+            } else {
+                item.status = status; saveSupplies(); renderSupplies();
+            }
+        }
+        function closeGreenModal() { document.getElementById('greenModal').style.display = 'none'; }
+
+        function startPrintProcess() {
+            const printArea = document.getElementById('printArea');
+            printArea.innerHTML = '<h1>Supply Order List</h1><hr>';
+            let needsOrder = false;
+            supplies.forEach(item => {
+                if (item.status !== 'green') {
+                    needsOrder = true;
+                    let statusText = item.status === 'yellow' ? "LOW" : "OUT";
+                    printArea.innerHTML += `<div class="print-item"><strong>${item.name}</strong> - ${statusText}</div>`;
+                }
+            });
+            if (!needsOrder) printArea.innerHTML += '<div class="print-item">All materials are currently in stock.</div>';
+            window.print();
+            document.getElementById('orderedModal').style.display = 'flex';
+        }
+        function closeOrderedModal() { document.getElementById('orderedModal').style.display = 'none'; }
+        function openClearModal() { closeOrderedModal(); document.getElementById('clearModal').style.display = 'flex'; }
+        function closeClearModal() { document.getElementById('clearModal').style.display = 'none'; }
+        function clearList() {
+            supplies.forEach(item => item.status = 'green');
+            saveSupplies(); renderSupplies(); closeClearModal();
+        }
+
+        // --- EMERGENCY MEDS LOGIC ---
+        let meds = [];
+        let nextMedId = 1;
+
+        function loadMeds() {
+            const data = localStorage.getItem('dchat_meds');
+            if (data) {
+                meds = JSON.parse(data);
+                if (meds.length > 0) nextMedId = Math.max(...meds.map(m => m.id)) + 1;
+            }
+        }
+        function saveMeds() { localStorage.setItem('dchat_meds', JSON.stringify(meds)); }
+
+        function addMed() {
+            const nameInput = document.getElementById('medNameInput');
+            const dateInput = document.getElementById('medExpiryInput');
+            if (nameInput.value.trim() && dateInput.value) {
+                meds.push({
+                    id: nextMedId++,
+                    name: nameInput.value.trim(),
+                    expiryDate: dateInput.value,
+                    ordered: false,
+                    received: false,
+                    isEditing: false,
+                    lastAlertDate: null
+                });
+                saveMeds();
+                nameInput.value = ''; dateInput.value = '';
+                renderMeds();
+            }
+        }
+
+        function toggleOrdered(id) {
+            const med = meds.find(m => m.id === id);
+            if (med) { med.ordered = !med.ordered; saveMeds(); renderMeds(); }
+        }
+
+        function markReceived(id) {
+            const med = meds.find(m => m.id === id);
+            if (med) {
+                med.received = true;
+                med.lastAlertDate = null;
+                med.ordered = false;
+                saveMeds();
+                renderMeds();
+                alert("Med marked as received. Alert system reset.");
+            }
+        }
+
+        function editMed(id) {
+            const med = meds.find(m => m.id === id);
+            if (med) { med.isEditing = true; renderMeds(); }
+        }
+
+        function saveMedEdit(id) {
+            const med = meds.find(m => m.id === id);
+            if (med) {
+                med.name = document.getElementById('editName-'+id).value.trim() || med.name;
+                med.expiryDate = document.getElementById('editDate-'+id).value || med.expiryDate;
+                med.isEditing = false;
+                med.received = false; // Reset states because date changed
+                med.lastAlertDate = null;
+                saveMeds();
+                renderMeds();
+            }
+        }
+
+        function deleteMed(id) {
+            if (confirm("Are you sure you want to delete this emergency med?")) {
+                meds = meds.filter(m => m.id !== id);
+                saveMeds();
+                renderMeds();
+            }
+        }
+
+        function getDaysUntilExpiry(dateStr) {
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const expiry = new Date(dateStr);
+            expiry.setHours(0,0,0,0);
+            const diffTime = expiry - today;
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        function renderMeds() {
+            const container = document.getElementById('medListContainer');
+            container.innerHTML = '';
+            if (meds.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#95a5a6; padding:20px;">No emergency meds added.</div>';
+                return;
+            }
+
+            meds.forEach(med => {
+                const daysLeft = getDaysUntilExpiry(med.expiryDate);
+                let badgeClass = "badge-green";
+                let badgeText = "OK";
+                
+                if (med.received) {
+                    badgeText = "RECEIVED";
+                } else if (daysLeft < 0) {
+                    badgeText = "EXPIRED";
+                    badgeClass = "badge-red";
+                } else if (daysLeft <= 30) {
+                    badgeText = "EXPIRING SOON";
+                    badgeClass = "badge-orange";
+                }
+
+                if (med.isEditing) {
+                    container.innerHTML += `
+                        <div class="med-item">
+                            <div class="edit-row">
+                                <input type="text" id="editName-${med.id}" value="${med.name}" style="flex:1;">
+                                <input type="date" id="editDate-${med.id}" value="${med.expiryDate}">
+                            </div>
+                            <div class="med-actions">
+                                <button class="btn btn-save" onclick="saveMedEdit(${med.id})">Save</button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML += `
+                        <div class="med-item">
+                            <div class="med-info">
+                                <span class="med-name">${med.name}</span>
+                                <span class="med-expiry">Expires: ${med.expiryDate} (${daysLeft} days left)</span>
+                                <span class="med-status-badge ${badgeClass}">${badgeText}</span>
+                            </div>
+                            <div class="med-actions">
+                                <label><input type="checkbox" ${med.ordered ? 'checked' : ''} onchange="toggleOrdered(${med.id})"> Ordered</label>
+                                <button class="btn btn-received" onclick="markReceived(${med.id})">Received</button>
+                                <button class="btn btn-edit" onclick="editMed(${med.id})">Edit</button>
+                                <button class="btn btn-delete" onclick="deleteMed(${med.id})">Del</button>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+        }
+
+        // --- DAILY ALERT LOGIC ---
+        function checkMedAlerts() {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const targets = JSON.parse(localStorage.getItem('dchat_alert_targets') || '[]');
+            if (targets.length === 0) return; 
+
+            let alertSent = false;
+
+            meds.forEach(med => {
+                if (med.received) return;
+                const daysLeft = getDaysUntilExpiry(med.expiryDate);
+                
+                if (daysLeft <= 30 && med.lastAlertDate !== todayStr) {
+                    const msg = {
+                        id: Date.now() + Math.random(), 
+                        type: 'private',
+                        from: "System Alert",
+                        target: targets,
+                        content: `EMERGENCY MED ALERT: ${med.name} expires on ${med.expiryDate} (${daysLeft} days left). Please reorder or replace.`,
+                        time: new Date().toLocaleTimeString()
+                    };
+                    
+                    // Emit message to server instead of localStorage
+                    socket.emit('sendMessage', msg);
+                    med.lastAlertDate = todayStr;
+                    alertSent = true;
+                }
+            });
+
+            if (alertSent) {
+                saveMeds();
+                renderMeds();
+            }
+        }
+
+        // Initialize
+        loadSupplies();
+        loadMeds();
+        renderSupplies();
+        renderMeds();
+        
+        checkMedAlerts();
+        setInterval(checkMedAlerts, 3600000); // Check every hour
+    </script>
+</body>
+</html>
