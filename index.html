@@ -581,8 +581,8 @@
             } else if (tab === 'sounds') {
                 title.innerText = "Sound & Alert Settings";
                 body.innerHTML = `<div class="settings-row"><span>Mute All Sounds</span><div class="toggle-switch ${soundSettings.muteAll ? 'on' : ''}" onclick="toggleSound('muteAll', this)"></div></div>
-                    <div style="margin-top: 18px; font-weight: bold; color: #2c3e50; font-size: 14px;">When a message arrives</div>
-                    <div style="font-size: 11px; color: #7f8c8d; margin: 4px 0 6px;">Set per computer. Pick either, both, or neither. Emergencies always do both regardless.</div>
+                    <div style="margin-top: 18px; font-weight: bold; color: #2c3e50; font-size: 14px;">When a message or room status arrives</div>
+                    <div style="font-size: 11px; color: #7f8c8d; margin: 4px 0 6px;">Applies to messages, rooms flagged on the grid, and reminders. Set per computer. Pick either, both, or neither. Emergencies always do both regardless.</div>
                     <div class="settings-row"><span>Bring the window to the front</span><div class="toggle-switch ${alertSettings.popup ? 'on' : ''}" onclick="toggleAlert('popup', this)"></div></div>
                     <div class="settings-row"><span>Flash the taskbar button</span><div class="toggle-switch ${alertSettings.flash ? 'on' : ''}" onclick="toggleAlert('flash', this)"></div></div>
                     <div style="margin-top: 18px; font-weight: bold; color: #2c3e50; font-size: 14px;">Room Reminders</div>
@@ -958,6 +958,9 @@
                 // Only reaches other computers, so the person who set it
                 // doesn't get chimed at for their own click.
                 playSound(data.status.sound);
+                // Same treatment as a message: whatever this computer asked for.
+                // Clearing a status deliberately does not do this.
+                grabAttention(false);
             }
             renderGrid();
         });
