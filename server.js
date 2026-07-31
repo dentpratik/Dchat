@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
 const { getDataDir } = require('./paths.js');
+const discovery = require('./discovery.js');
 
 const app = express();
 const server = http.createServer(app);
@@ -53,6 +54,12 @@ let masterCategories = [
 let alertRecipients = ["Liz"];
 const ALERT_DAYS = 30;
 
+// Live room statuses. These used to exist only in each computer's memory,
+// which meant a machine starting up mid-morning showed an empty board and
+// reminders had nothing durable to hang off.
+let activeStatuses = {};
+let reminderIntervalMin = 3;
+
 let masterSupplies = [];
 let masterMeds = [];
 
@@ -73,6 +80,8 @@ function loadData() {
         masterSupplies = savedData.supplies || masterSupplies;
         masterMeds = savedData.meds || masterMeds;
         if (Array.isArray(savedData.alertRecipients)) alertRecipients = savedData.alertRecipients;
+        if (savedData.activeStatuses) activeStatuses = savedData.activeStatuses;
+        if (typeof savedData.reminderIntervalMin === 'number') reminderIntervalMin = savedData.reminderIntervalMin;
         if (masterStations.length > 0) nextStationId = Math.max(...masterStations.map(s => s.id)) + 1;
         if (masterDoctors.length > 0) nextDocId = Math.max(...masterDoctors.map(d => d.id)) + 1;
         if (masterCategories.length > 0) nextCatId = Math.max(...masterCategories.map(c => c.id)) + 1;
@@ -91,7 +100,9 @@ function saveData() {
         categories: masterCategories,
         supplies: masterSupplies,
         meds: masterMeds,
-        alertRecipients: alertRecipients
+        alertRecipients: alertRecipients,
+        activeStatuses: activeStatuses,
+        reminderIntervalMin: reminderIntervalMin
     };
     fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
@@ -105,7 +116,8 @@ function syncData(targetSocket) {
         categories: masterCategories,
         supplies: masterSupplies,
         meds: masterMeds,
-        alertRecipients: alertRecipients
+        alertRecipients: alertRecipients,
+        reminderIntervalMin: reminderIntervalMin
     };
     if (targetSocket) {
         targetSocket.emit('syncData', payload);
@@ -209,10 +221,36 @@ function checkMedExpiry() {
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
     syncData(socket);
+    // Whatever is happening in the office right now, not an empty board.
+    socket.emit('syncStatuses', activeStatuses);
 
     socket.on('sendMessage', (msg) => { socket.broadcast.emit('receiveMessage', msg); });
     socket.on('sendEmergency', (emergencyData) => { socket.broadcast.emit('receiveEmergency', emergencyData); });
-    socket.on('updateStatus', (data) => { socket.broadcast.emit('statusUpdated', data); });
+    socket.on('updateStatus', (data) => {
+        if (data.status === null || data.status === undefined) {
+            delete activeStatuses[data.stationId];
+        } else {
+            // lastReminder starts now so the first nudge lands a full interval later.
+            activeStatuses[data.stationId] = Object.assign({}, data.status, { lastReminder: Date.now() });
+        }
+        // Still broadcast rather than emit, so the person who set it doesn't
+        // get chimed at by their own click.
+        socket.broadcast.emit('statusUpdated', data);
+        saveData();
+    });
+
+    socket.on('clearAllStatuses', () => {
+        activeStatuses = {};
+        io.emit('syncStatuses', activeStatuses);
+        saveData();
+    });
+
+    socket.on('setReminderInterval', (mins) => {
+        const n = Number(mins);
+        if (isNaN(n) || n < 0 || n > 30) return;
+        reminderIntervalMin = n;
+        syncData();
+    });
 
     socket.on('registerName', (name) => {
         const isTaken = Object.values(activeUsers).includes(name);
@@ -430,6 +468,48 @@ const PORT = 3000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Chit-Chat server is running on port ${PORT}. Serving files from: ${staticPath}`);
 });
+
+// ---------------- STATUS REMINDERS ----------------
+// A room flagged for a doctor nudges that doctor again every few minutes until
+// somebody clears it. Only the named doctor is nudged; chiming the whole office
+// about something one person can act on just trains everyone to ignore it.
+
+function checkStatusReminders() {
+    if (!reminderIntervalMin || reminderIntervalMin <= 0) return;
+    const gap = reminderIntervalMin * 60000;
+    const now = Date.now();
+
+    for (const stationId in activeStatuses) {
+        const st = activeStatuses[stationId];
+        if (!st || !st.doctor) continue;      // nobody named, nobody to nudge
+        if (now - (st.lastReminder || st.startTime || now) < gap) continue;
+
+        st.lastReminder = now;
+
+        const station = masterStations.find(s => String(s.id) === String(stationId));
+        const payload = {
+            stationId: Number(stationId),
+            stationName: station ? station.name : 'A room',
+            status: st,
+            waitingMinutes: Math.floor((now - (st.startTime || now)) / 60000)
+        };
+
+        let delivered = 0;
+        for (const socketId in activeUsers) {
+            if (activeUsers[socketId] !== st.doctor) continue;
+            const sock = io.sockets.sockets.get(socketId);
+            if (sock) { sock.emit('statusReminder', payload); delivered++; }
+        }
+        if (delivered === 0) {
+            console.log(`Reminder for ${payload.stationName} could not reach "${st.doctor}" - not connected.`);
+        }
+    }
+}
+
+setInterval(checkStatusReminders, 15000);
+
+// Answer clients asking where the server is, so nobody has to type an IP.
+discovery.startResponder();
 
 // Check at startup, then hourly. Hourly rather than once a day so the office
 // still gets the alert if the server PC was switched off at the scheduled time.

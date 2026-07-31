@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Supply & Med Management</title>
+    <!-- Added Socket.io Script -->
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f7; margin: 0; padding: 20px; }
         .header { background: #2c3e50; color: white; padding: 15px; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center; }
         .header h1 { font-size: 22px; }
-
+        
         /* Tabs */
         .tabs { display: flex; background: white; padding: 0 15px; border-bottom: 2px solid #eee; }
         .tab-btn { padding: 12px 20px; background: #ecf0f1; border: none; cursor: pointer; font-weight: bold; font-size: 14px; border-radius: 5px 5px 0 0; margin-right: 5px; color: #7f8c8d; }
@@ -24,7 +25,7 @@
         .btn-save { background: #2980b9; }
 
         .content-area { background: white; padding: 15px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); min-height: 400px; }
-
+        
         /* Supplies Tab Styles */
         .search-area { display: flex; gap: 10px; flex-direction: column; margin-bottom: 15px; }
         .search-input { padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
@@ -160,7 +161,7 @@
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
-
+        
         function renderSupplies() {
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
             const container = document.getElementById('supplyListContainer');
@@ -304,7 +305,7 @@
                 const daysLeft = getDaysUntilExpiry(med.expiryDate);
                 let badgeClass = "badge-green";
                 let badgeText = "OK";
-
+                
                 if (med.received) {
                     badgeText = "RECEIVED";
                 } else if (daysLeft < 0) {

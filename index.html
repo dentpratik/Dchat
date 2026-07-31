@@ -30,6 +30,11 @@
         .box { border: 1px solid #bdc3c7; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; color: #34495e; background-color: #ecf0f1; cursor: pointer; text-align: center; transition: background 0.2s, border 0.2s, opacity 0.2s; position: relative; overflow: hidden; }
         .box:hover { border-color: #3498db; }
         .box.dragging { opacity: 0.4; border: 2px dashed #3498db; }
+        .box.overdue { animation: boxPulse 1.4s ease-in-out infinite; }
+        @keyframes boxPulse {
+            0%, 100% { box-shadow: inset 0 0 0 0 rgba(255,255,255,0); }
+            50% { box-shadow: inset 0 0 0 3px rgba(255,255,255,0.85); }
+        }
         .box .timer { font-size: 9px; font-weight: normal; margin-top: 2px; color: #fff; background: rgba(0,0,0,0.2); padding: 1px 4px; border-radius: 3px; }
         .box-name-input { width: 90%; font-size: 11px; text-align: center; border: 1px solid #3498db; padding: 2px; }
         .footer { display: flex; gap: 10px; padding: 8px 10px; height: 50px; background-color: #f4f6f7; border-top: 1px solid #d5dbdb; }
@@ -92,6 +97,10 @@
         .thread-msg .who { font-size: 10px; font-weight: bold; color: #7f8c8d; text-transform: uppercase; letter-spacing: 0.3px; }
         .thread-msg .body { color: #2c3e50; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; }
         .thread-actions { padding: 6px 10px 9px; }
+        .thread-del { cursor: pointer; color: #c0392b; font-weight: bold; padding: 0 3px; font-size: 14px; line-height: 1; }
+        .thread-del:hover { color: #922b21; }
+        .inbox-clear { background: #7f8c8d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-right: 8px; }
+        .inbox-clear:hover { background: #616a6b; }
         .thread-reply-btn { padding: 4px 12px; background: #8e44ad; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; }
         .thread-reply-btn:hover { opacity: 0.85; }
         .settings-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #ddd; gap: 10px; }
@@ -176,7 +185,7 @@
         <div class="inbox-overlay" id="inboxOverlay">
             <div class="settings-header">
                 <h2>Inbox</h2>
-                <button class="settings-back" onclick="closeInbox()">Back to Chit-Chat</button>
+                <div><button class="inbox-clear" onclick="clearInbox()">Clear All</button><button class="settings-back" onclick="closeInbox()">Back to Chit-Chat</button></div>
             </div>
             <div class="inbox-body" id="inboxBody"></div>
         </div>
@@ -203,6 +212,10 @@
         let isEditMode = false;
         let selectedDoctorInWS = "";
         let soundSettings = { muteAll: false, broadcastSound: true, privateMessageSound: true };
+        // How this computer should get your attention for a new message.
+        let alertSettings = { popup: false, flash: true };
+        // Office-wide, set on the server. 0 means reminders off.
+        let reminderInterval = 3;
 
         let currentMsgType = "";
         let inboxMessages = [];
@@ -291,6 +304,61 @@
             if (soundSettings.muteAll) return;
             if (isPrivate) { tone(784, 0, 0.16, 'sine', 0.5); tone(1046, 0.14, 0.26, 'sine', 0.45); }
             else { tone(587, 0, 0.22, 'sine', 0.4); }
+        }
+
+        // ---------------- GETTING YOUR ATTENTION ----------------
+        // In the installed app this raises the window and/or flashes the
+        // taskbar button. In a plain browser tab neither is possible, so the
+        // page title flashes instead.
+
+        let titleFlashTimer = null;
+
+        function startTitleFlash() {
+            if (titleFlashTimer) return;
+            let on = false;
+            titleFlashTimer = setInterval(() => {
+                on = !on;
+                document.title = on ? '*** NEW MESSAGE ***' : 'Chit-Chat';
+            }, 700);
+        }
+
+        function stopTitleFlash() {
+            if (!titleFlashTimer) return;
+            clearInterval(titleFlashTimer);
+            titleFlashTimer = null;
+            document.title = 'Chit-Chat';
+        }
+        window.addEventListener('focus', stopTitleFlash);
+
+        function grabAttention(isEmergency) {
+            // An emergency overrides personal preference. That is the point of it.
+            const opts = isEmergency
+                ? { popup: true, flash: true }
+                : { popup: alertSettings.popup, flash: alertSettings.flash };
+
+            if (window.chitchat && window.chitchat.notify) {
+                window.chitchat.notify(opts);
+            } else if (opts.flash || opts.popup) {
+                startTitleFlash();
+            }
+        }
+
+        function previewInterval(v) {
+            const el = document.getElementById('intervalLabel');
+            if (el) el.innerText = Number(v) > 0 ? v + ' min' : 'Off';
+        }
+
+        function saveInterval(v) { socket.emit('setReminderInterval', Number(v)); }
+
+        function clearAllStatuses() {
+            if (!confirm("Clear the status on every room, for the whole office?")) return;
+            socket.emit('clearAllStatuses');
+        }
+
+        function toggleAlert(setting, element) {
+            alertSettings[setting] = !alertSettings[setting];
+            element.classList.toggle('on');
+            localStorage.setItem('dchat_alert_prefs', JSON.stringify(alertSettings));
         }
 
         function getMyName() { return document.getElementById('myNameInput').value.trim(); }
@@ -513,6 +581,14 @@
             } else if (tab === 'sounds') {
                 title.innerText = "Sound & Alert Settings";
                 body.innerHTML = `<div class="settings-row"><span>Mute All Sounds</span><div class="toggle-switch ${soundSettings.muteAll ? 'on' : ''}" onclick="toggleSound('muteAll', this)"></div></div>
+                    <div style="margin-top: 18px; font-weight: bold; color: #2c3e50; font-size: 14px;">When a message arrives</div>
+                    <div style="font-size: 11px; color: #7f8c8d; margin: 4px 0 6px;">Set per computer. Pick either, both, or neither. Emergencies always do both regardless.</div>
+                    <div class="settings-row"><span>Bring the window to the front</span><div class="toggle-switch ${alertSettings.popup ? 'on' : ''}" onclick="toggleAlert('popup', this)"></div></div>
+                    <div class="settings-row"><span>Flash the taskbar button</span><div class="toggle-switch ${alertSettings.flash ? 'on' : ''}" onclick="toggleAlert('flash', this)"></div></div>
+                    <div style="margin-top: 18px; font-weight: bold; color: #2c3e50; font-size: 14px;">Room Reminders</div>
+                    <div style="font-size: 11px; color: #7f8c8d; margin: 4px 0 6px;">If a room is flagged for a doctor and nobody clears it, that doctor is reminded again on this schedule. Office-wide setting. The box also starts pulsing on every screen.</div>
+                    <div class="settings-row"><span>Remind every</span><span style="display:flex; align-items:center; gap:10px; flex:1; justify-content:flex-end;"><input type="range" min="0" max="15" step="1" value="${reminderInterval}" style="flex:1; max-width:180px;" oninput="previewInterval(this.value)" onchange="saveInterval(this.value)"><span id="intervalLabel" style="min-width:60px; text-align:right; font-weight:bold; color:#2c3e50;">${reminderInterval > 0 ? reminderInterval + ' min' : 'Off'}</span></span></div>
+                    <div class="settings-row"><span>Clear every room's status</span><button class="btn-delete" onclick="clearAllStatuses()">Clear All</button></div>
                     <div style="margin-top: 18px; font-weight: bold; color: #2c3e50; font-size: 14px;">Emergency Med Expiry Alerts</div>
                     <div style="font-size: 11px; color: #7f8c8d; margin: 4px 0 10px;">Sent when a med is within 30 days of expiry. Doctors marked as working always receive these. Add anyone else below. Names must match what they type in their name box.</div>
                     <div style="display: flex; gap: 10px; margin-bottom: 10px;"><input type="text" id="newAlertName" placeholder="Name (e.g. Liz)" style="flex:1; padding:5px;"><button class="btn-add" onclick="addAlertRecipient()">Add</button></div>
@@ -584,7 +660,6 @@
                 </div>`;
             });
         }
-
         function renderAlertRecipients() {
             const list = document.getElementById('alertList');
             if (!list) return;
@@ -709,6 +784,7 @@
             unreadCount++;
             updateInboxBadge();
             playMessageSound(msg.type === 'private');
+            grabAttention(false);
         }
 
         function updateInboxBadge() {
@@ -763,7 +839,7 @@
                     const lastTime = thread.msgs[thread.msgs.length - 1].time;
 
                     let html = `<div class="thread ${isBroadcastOnly ? '' : 'private'}">
-                        <div class="thread-header"><span class="thread-with">${esc(withText)}</span><span>${esc(lastTime)}</span></div>`;
+                        <div class="thread-header"><span class="thread-with">${esc(withText)}</span><span>${esc(lastTime)} <span class="thread-del" onclick="deleteThread(${thread.id})" title="Delete this conversation">&times;</span></span></div>`;
 
                     thread.msgs.forEach(m => {
                         const mine = m.from === me;
@@ -786,6 +862,7 @@
             document.getElementById('inboxOverlay').style.display = 'flex';
             unreadCount = 0;
             updateInboxBadge();
+            stopTitleFlash();
         }
 
         function replyToThread(threadId) {
@@ -800,6 +877,19 @@
                 preselect: people,
                 title: "Reply to " + people.join(', ')
             });
+        }
+
+        // Deleting only clears this computer's copy. Everyone else keeps theirs.
+        function deleteThread(threadId) {
+            inboxMessages = inboxMessages.filter(m => (m.threadId || m.id) !== threadId);
+            openInbox();
+        }
+
+        function clearInbox() {
+            if (inboxMessages.length === 0) return;
+            if (!confirm("Clear every message from this computer's inbox?")) return;
+            inboxMessages = [];
+            openInbox();
         }
 
         function closeInbox() { document.getElementById('inboxOverlay').style.display = 'none'; }
@@ -817,6 +907,7 @@
             document.getElementById('emergencyStationName').innerText = "Alert from: " + stationName;
             document.getElementById('emergencyOverlay').style.display = 'flex';
             playEmergency();
+            grabAttention(true);
         }
         function clearEmergency() { document.getElementById('emergencyOverlay').style.display = 'none'; }
 
@@ -829,6 +920,7 @@
             doctors = data.doctors;
             categories = data.categories;
             alertRecipients = data.alertRecipients || [];
+            if (typeof data.reminderIntervalMin === 'number') reminderInterval = data.reminderIntervalMin;
             renderGrid();
             renderCategories();
             if (document.getElementById('stationList')) renderStationList();
@@ -843,6 +935,19 @@
 
         socket.on('receiveEmergency', (emergencyData) => {
             showEmergencyAlert(emergencyData.station);
+        });
+
+        // The full picture of what every room is doing, sent on connect and
+        // after a bulk clear. Replaces starting up with an empty board.
+        socket.on('syncStatuses', (all) => {
+            activeStatus = all || {};
+            renderGrid();
+        });
+
+        // A room this doctor is needed in is still waiting.
+        socket.on('statusReminder', (data) => {
+            playSound(data.status && data.status.sound);
+            grabAttention(false);
         });
 
         socket.on('statusUpdated', (data) => {
@@ -872,11 +977,23 @@
                     if (activeStatus[id].doctor) displayText += ` - ${activeStatus[id].doctor}`;
                     displayText += ` (${minutes}m)`;
                     timerSpan.innerText = displayText;
+
+                    // Visible escalation, no extra noise. Works even if muted.
+                    const box = document.getElementById('box-' + id);
+                    if (box) {
+                        const overdue = reminderInterval > 0 && elapsed > reminderInterval * 60000;
+                        box.classList.toggle('overdue', overdue);
+                    }
                 }
             }
         }, 1000);
 
         // Initialize App
+        const savedAlerts = localStorage.getItem('dchat_alert_prefs');
+        if (savedAlerts) {
+            try { alertSettings = Object.assign(alertSettings, JSON.parse(savedAlerts)); } catch (e) {}
+        }
+
         const savedSound = localStorage.getItem('dchat_sound_settings');
         if (savedSound) {
             try { soundSettings = Object.assign(soundSettings, JSON.parse(savedSound)); } catch (e) {}
@@ -891,3 +1008,4 @@
     </script>
 </body>
 </html>
+

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chit-Chat Setup</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background: #e2e5e9; height: 100vh; display: flex; flex-direction: column; }
+    .header { background: #2c3e50; color: white; padding: 12px 16px; font-size: 16px; font-weight: bold; }
+    .body { flex: 1; padding: 16px; overflow-y: auto; }
+
+    .searching { text-align: center; padding: 30px 10px; color: #7f8c8d; font-size: 14px; }
+    .spinner { width: 26px; height: 26px; border: 3px solid #d5dbdb; border-top-color: #2980b9; border-radius: 50%; margin: 0 auto 12px; animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .found { background: #eafaf1; border: 1px solid #27ae60; border-radius: 6px; padding: 14px; margin-bottom: 14px; }
+    .found h3 { color: #1e8449; font-size: 14px; margin-bottom: 4px; }
+    .found p { color: #2c3e50; font-size: 13px; margin-bottom: 12px; }
+    .ip { font-family: 'Courier New', monospace; font-weight: bold; }
+
+    .card { background: white; border: 1px solid #bdc3c7; border-radius: 6px; padding: 14px; margin-bottom: 12px; }
+    .card h3 { font-size: 14px; color: #2c3e50; margin-bottom: 4px; }
+    .card p { font-size: 12px; color: #7f8c8d; margin-bottom: 10px; line-height: 1.45; }
+
+    button { border: none; border-radius: 4px; padding: 10px 14px; font-size: 13px; font-weight: bold; color: white; cursor: pointer; }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .btn-primary { background: #27ae60; width: 100%; }
+    .btn-server { background: #2c3e50; width: 100%; }
+    .btn-link { background: none; color: #2980b9; text-decoration: underline; padding: 6px 0; font-weight: normal; }
+
+    .row { display: flex; gap: 8px; }
+    .row input { flex: 1; padding: 9px; border: 1px solid #bdc3c7; border-radius: 4px; font-size: 13px; }
+    .row button { background: #2980b9; white-space: nowrap; }
+
+    .error { color: #c0392b; font-size: 12px; margin-top: 8px; display: none; }
+    .note { font-size: 11px; color: #7f8c8d; text-align: center; margin-top: 6px; }
+</style>
+</head>
+<body>
+    <div class="header">Chit-Chat Setup</div>
+    <div class="body">
+
+        <div id="searching" class="searching">
+            <div class="spinner"></div>
+            Looking for the office server...
+        </div>
+
+        <div id="choices" style="display:none;">
+
+            <div id="foundBox" class="found" style="display:none;">
+                <h3>Found the office server</h3>
+                <p>Running at <span class="ip" id="foundIP"></span></p>
+                <button class="btn-primary" onclick="useFound()">Connect to this server</button>
+            </div>
+
+            <div class="card">
+                <h3>This computer is the server</h3>
+                <p>Choose this for one computer only - the one that stays on all day. It stores the station list and everyone else connects to it.</p>
+                <button class="btn-server" onclick="beServer()">Make this the server</button>
+            </div>
+
+            <div class="card">
+                <h3>Connect to a server by address</h3>
+                <p>Only needed if the search above found nothing. Type the server computer's IP address or its Windows computer name.</p>
+                <div class="row">
+                    <input type="text" id="manualIP" placeholder="192.168.1.47" onkeydown="if(event.key==='Enter')useManual()">
+                    <button onclick="useManual()">Connect</button>
+                </div>
+                <div class="error" id="err"></div>
+            </div>
+
+            <button class="btn-link" onclick="search()">Search again</button>
+            <div class="note" id="myIPs"></div>
+        </div>
+    </div>
+
+<script>
+    function show(id, on) { document.getElementById(id).style.display = on ? 'block' : 'none'; }
+
+    async function search() {
+        show('searching', true);
+        show('choices', false);
+        const ip = await window.setup.discover();
+        show('searching', false);
+        show('choices', true);
+        if (ip) {
+            document.getElementById('foundIP').innerText = ip;
+            show('foundBox', true);
+        } else {
+            show('foundBox', false);
+        }
+        const mine = await window.setup.localIPs();
+        document.getElementById('myIPs').innerText =
+            mine.length ? 'This computer: ' + mine.join(', ') : '';
+    }
+
+    function useFound() {
+        window.setup.save({ isServer: false, serverIP: document.getElementById('foundIP').innerText });
+    }
+
+    function beServer() {
+        window.setup.save({ isServer: true, serverIP: 'localhost' });
+    }
+
+    function useManual() {
+        const v = document.getElementById('manualIP').value.trim();
+        const err = document.getElementById('err');
+        if (!v) {
+            err.innerText = 'Enter the server address first.';
+            err.style.display = 'block';
+            return;
+        }
+        err.style.display = 'none';
+        window.setup.save({ isServer: false, serverIP: v });
+    }
+
+    search();
+</script>
+</body>
+</html>

@@ -1,9 +1,8 @@
 {
   "name": "dchat",
-  "version": "1.1.0",
+  "version": "1.4.0",
   "description": "Chit-Chat - dental office communication board",
   "main": "main.js",
-  "productName": "Chit-Chat",
   "scripts": {
     "start": "electron .",
     "server": "node server.js",
@@ -12,7 +11,7 @@
     "dist:win": "electron-builder --win"
   },
   "keywords": [],
-  "author": "Pratik Patel",
+  "author": "Your Name",
   "license": "ISC",
   "dependencies": {
     "express": "^5.2.1",
@@ -29,6 +28,10 @@
       "main.js",
       "server.js",
       "paths.js",
+      "discovery.js",
+      "preload.js",
+      "notify-preload.js",
+      "setup.html",
       "index.html",
       "supplies.html",
       "package.json"
@@ -58,5 +61,6 @@
       "category": "public.app-category.medical",
       "identity": null
     }
-  }
+  },
+  "productName": "Chit-Chat"
 }
