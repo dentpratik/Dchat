@@ -41,10 +41,18 @@
         .footer button { flex: 1; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; color: white; position: relative; }
         .footer button:hover { opacity: 0.9; }
         .btn-broadcast { background-color: #2980b9; }
+        .announce-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.35); display: none; justify-content: center; align-items: center; z-index: 60; }
+        .announce-box { background: white; border: 2px solid #2980b9; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.35); min-width: 300px; max-width: 460px; padding: 14px 16px; }
+        .announce-from { font-size: 12px; font-weight: bold; color: #2980b9; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+        .announce-text { font-size: 14px; color: #2c3e50; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 14px; }
+        .announce-actions { display: flex; gap: 10px; justify-content: flex-end; }
+        .announce-actions button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; color: white; }
+        .btn-announce-reply { background: #8e44ad; }
+        .btn-announce-dismiss { background: #95a5a6; }
         .btn-private { background-color: #8e44ad; }
         .btn-inbox { background-color: #2c3e50; }
         .inbox-badge { background: #e74c3c; color: white; border-radius: 10px; padding: 2px 6px; font-size: 10px; margin-left: 5px; display: none; }
-        .working-square { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 190px; height: 260px; background: white; border: 2px solid #2c3e50; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: none; flex-direction: column; padding: 8px; z-index: 20; }
+        .working-square { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 228px; height: 325px; background: white; border: 2px solid #2c3e50; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: none; flex-direction: column; padding: 8px; z-index: 20; }
         .ws-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
         .ws-title { font-size: 12px; font-weight: bold; color: #2c3e50; flex: 1; }
         .ws-manage-btn { background: #f39c12; color: white; border: none; border-radius: 3px; cursor: pointer; padding: 2px 5px; font-size: 10px; margin-right: 5px; }
@@ -63,8 +71,8 @@
         .ws-add-area { display: flex; gap: 5px; margin-bottom: 8px; }
         .ws-add-area input { flex: 1; padding: 4px; font-size: 11px; border: 1px solid #bdc3c7; border-radius: 4px; }
         .ws-add-area button { padding: 4px 8px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; }
-        .ws-clear-btn { width: 100%; padding: 6px; background: #95a5a6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
-        .ws-clear-btn:hover { background: #7f8c8d; }
+        .ws-msg-btn { width: 100%; padding: 7px; background: #8e44ad; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
+        .ws-msg-btn:hover { opacity: 0.88; }
         .msg-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 250px; background: white; border: 2px solid #8e44ad; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: none; flex-direction: column; padding: 10px; z-index: 25; }
         .msg-box-title { font-size: 14px; font-weight: bold; color: #2c3e50; margin-bottom: 10px; text-align: center; }
         .msg-box textarea { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; resize: vertical; height: 80px; font-family: inherit; }
@@ -139,7 +147,7 @@
         </div>
         <div class="grid-area" id="gridArea"></div>
         <div class="footer">
-            <button class="btn-broadcast" onclick="openMsgBox('broadcast')">Broadcast (All)</button>
+            <button class="btn-broadcast" onclick="openMsgBox('broadcast')">Announcement (All)</button>
             <button class="btn-private" onclick="openMsgBox('private')">Private Message</button>
             <button class="btn-inbox" onclick="openInbox()">Inbox <span class="inbox-badge" id="inboxBadge">0</span></button>
         </div>
@@ -155,7 +163,7 @@
                 <input type="text" id="newCatInput" placeholder="Add category...">
                 <button onclick="addCategory()">Add</button>
             </div>
-            <button class="ws-clear-btn" onclick="clearStatus()">Clear Status</button>
+            <button class="ws-msg-btn" onclick="messageStation()">Private Message</button>
         </div>
         <div class="msg-box" id="msgBox">
             <div class="msg-box-title" id="msgBoxTitle">Send Message</div>
@@ -173,6 +181,16 @@
             <div class="msg-box-actions">
                 <button class="btn-cancel" onclick="closeEmergencyConfirm()">No, Cancel</button>
                 <button style="background: #c0392b;" onclick="sendEmergency()">Yes, Alert All</button>
+            </div>
+        </div>
+        <div class="announce-overlay" id="announceOverlay">
+            <div class="announce-box">
+                <div class="announce-from" id="announceFrom">Announcement</div>
+                <div class="announce-text" id="announceText"></div>
+                <div class="announce-actions">
+                    <button class="btn-announce-reply" id="announceReplyBtn" onclick="replyToAnnounce()">Reply</button>
+                    <button class="btn-announce-dismiss" onclick="dismissAnnounce()">Dismiss</button>
+                </div>
             </div>
         </div>
         <div class="emergency-overlay" id="emergencyOverlay">
@@ -213,7 +231,7 @@
         let selectedDoctorInWS = "";
         let soundSettings = { muteAll: false, broadcastSound: true, privateMessageSound: true };
         // How this computer should get your attention for a new message.
-        let alertSettings = { popup: false, flash: true };
+        let alertSettings = { popup: false, flash: true };  // flash on out of the box
         // Office-wide, set on the server. 0 means reminders off.
         let reminderInterval = 3;
 
@@ -302,8 +320,18 @@
 
         function playMessageSound(isPrivate) {
             if (soundSettings.muteAll) return;
-            if (isPrivate) { tone(784, 0, 0.16, 'sine', 0.5); tone(1046, 0.14, 0.26, 'sine', 0.45); }
-            else { tone(587, 0, 0.22, 'sine', 0.4); }
+            // Private message: soft two-note rise.
+            tone(784, 0, 0.16, 'sine', 0.5);
+            tone(1046, 0.14, 0.26, 'sine', 0.45);
+        }
+
+        // Announcement: a warm three-note phrase, respecting mute. Distinct
+        // from a private message so people can tell the two apart by ear.
+        function playAnnounceSound() {
+            if (soundSettings.muteAll) return;
+            tone(659, 0,    0.18, 'sine', 0.5);
+            tone(784, 0.16, 0.18, 'sine', 0.5);
+            tone(1046, 0.32, 0.34, 'sine', 0.5);
         }
 
         // ---------------- GETTING YOUR ATTENTION ----------------
@@ -550,7 +578,23 @@
                 socket.emit('updateStatus', { stationId: stationId, status: activeStatus[stationId] });
             }
         }
-        function clearStatus() { if (currentWSStation) { clearStatusInstant(currentWSStation); closeWS(); } }
+        // Shortcut to the normal compose window, with this room pre-ticked.
+        // Other names stay listed, so extra recipients can still be added.
+        function messageStation() {
+            if (!currentWSStation) return;
+            const station = stations.find(s => s.id === currentWSStation);
+            if (!station) return;
+            closeWS();
+            if (station.name === getMyName()) {
+                // Messaging your own station makes no sense; open it blank.
+                openMsgBox('private');
+                return;
+            }
+            openMsgBox('private', {
+                preselect: [station.name],
+                title: 'Message ' + station.name
+            });
+        }
 
         // Menu Logic
         function toggleMenu(event) {
@@ -717,7 +761,7 @@
             currentThreadId = opts.threadId || null;
 
             document.getElementById('msgBoxTitle').innerText =
-                opts.title || (type === 'broadcast' ? "Broadcast to All" : "Private Message");
+                opts.title || (type === 'broadcast' ? "Announcement to Everyone" : "Private Message");
 
             const targetList = document.getElementById('msgTargetList');
             targetList.innerHTML = '';
@@ -894,6 +938,37 @@
 
         function closeInbox() { document.getElementById('inboxOverlay').style.display = 'none'; }
 
+        // ANNOUNCEMENT LOGIC
+        // A broadcast now appears centred on every screen instead of going to
+        // the inbox. Replying sends a normal private message back to whoever
+        // made it, which does land in that person's inbox.
+
+        let currentAnnounce = null;
+
+        function showAnnouncement(msg) {
+            currentAnnounce = msg;
+            document.getElementById('announceFrom').innerText =
+                'Announcement' + (msg.from ? ' from ' + msg.from : '');
+            document.getElementById('announceText').innerText = msg.content;
+            // No one to reply to if we somehow don't know the sender.
+            document.getElementById('announceReplyBtn').style.display = msg.from ? 'inline-block' : 'none';
+            document.getElementById('announceOverlay').style.display = 'flex';
+            playAnnounceSound();
+            grabAttention(false);
+        }
+
+        function dismissAnnounce() {
+            document.getElementById('announceOverlay').style.display = 'none';
+            currentAnnounce = null;
+        }
+
+        function replyToAnnounce() {
+            const from = currentAnnounce && currentAnnounce.from;
+            dismissAnnounce();
+            if (!from) return;
+            openMsgBox('private', { preselect: [from], title: 'Reply to ' + from });
+        }
+
         // EMERGENCY LOGIC
         function triggerEmergency() { document.getElementById('emergencyConfirm').style.display = 'flex'; }
         function closeEmergencyConfirm() { document.getElementById('emergencyConfirm').style.display = 'none'; }
@@ -930,7 +1005,11 @@
         });
 
         socket.on('receiveMessage', (msg) => {
-            if (msg.type === 'broadcast' || (Array.isArray(msg.target) && msg.target.includes(getMyName()))) { receiveMessage(msg); }
+            if (msg.type === 'broadcast') {
+                showAnnouncement(msg);      // pops up on every screen, skips the inbox
+            } else if (Array.isArray(msg.target) && msg.target.includes(getMyName())) {
+                receiveMessage(msg);
+            }
         });
 
         socket.on('receiveEmergency', (emergencyData) => {
