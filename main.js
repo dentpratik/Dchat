@@ -174,19 +174,28 @@ ipcMain.on('notify:attention', (event, opts) => {
     if (!mainWindow) return;
     opts = opts || {};
 
-    // Already looking at it? Then there is nothing to attract.
-    if (mainWindow.isFocused() && mainWindow.isVisible()) return;
+    // Only skip if the window is genuinely the one in front. isFocused alone
+    // was wrong: a window sitting behind another app can still report focused,
+    // which suppressed the alert - the "beeps but never surfaces" bug. Treat
+    // minimized OR buried the same: the user isn't looking at it, so alert.
+    const trulyInFront = mainWindow.isVisible()
+        && !mainWindow.isMinimized()
+        && mainWindow.isFocused();
+    if (trulyInFront) return;
 
     if (opts.popup) {
         if (mainWindow.isMinimized()) mainWindow.restore();
         if (!mainWindow.isVisible()) mainWindow.show();
-        // Briefly on top, otherwise Windows often refuses to raise a window
-        // that the user didn't interact with themselves.
+        // Ask Windows to raise it. When the window is buried behind an app the
+        // user is actively using, Windows may refuse to steal focus - that is an
+        // OS rule we can't override, and the flash below is the reliable backup.
         mainWindow.setAlwaysOnTop(true);
         mainWindow.focus();
         mainWindow.setAlwaysOnTop(false);
     }
 
+    // Flash always works, minimized or buried, and keeps flashing until the
+    // window is clicked (a focus handler stops it).
     if (opts.flash) {
         try { mainWindow.flashFrame(true); } catch (e) {}
     }
